@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Google Account Chooser — Options</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      color: #202124;
+      background: #f8f9fa;
+      min-height: 100vh;
+    }
+
+    .page {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 40px 24px 60px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    header h1 {
+      font-size: 22px;
+      font-weight: 400;
+      color: #202124;
+    }
+
+    .subtitle {
+      color: #5f6368;
+      font-size: 13px;
+      margin-bottom: 32px;
+      padding-left: 44px;
+    }
+
+    /* Card with header: remove top padding so header sits flush */
+    .card:has(.card-header) {
+      padding-top: 0;
+    }
+
+    /* Card headers (General, Menu) */
+    .card-header {
+      padding: 12px 20px;
+      border-bottom: 1px solid #e8eaed;
+      margin: 0 -20px 0;
+    }
+
+    .card-header h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #5f6368;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .card-header + .card-row {
+      padding-top: 16px;
+    }
+
+    /* Global toggle card */
+    .card {
+      background: #fff;
+      border: 1px solid #e8eaed;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .card-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+      transition: opacity 0.15s;
+    }
+
+    .card-row:has(input:disabled) {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    .card-row + .card-row {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #f1f3f4;
+    }
+
+    .card .label {
+      font-weight: 500;
+      color: #202124;
+    }
+
+    .card .hint {
+      font-size: 12px;
+      color: #5f6368;
+      margin-top: 2px;
+    }
+
+    /* Services table */
+    .services-card {
+      background: #fff;
+      border: 1px solid #e8eaed;
+      border-radius: 8px;
+    }
+
+    .services-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid #e8eaed;
+    }
+
+    .services-card-header h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #5f6368;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .services-card-header-cols {
+      display: flex;
+      gap: 0;
+    }
+
+    .header-col {
+      width: 100px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 500;
+      color: #5f6368;
+    }
+
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead.visually-hidden {
+      visibility: hidden;
+      height: 0;
+    }
+
+    thead.visually-hidden th {
+      padding: 0;
+      height: 0;
+    }
+
+    thead th:not(:first-child) {
+      width: 100px;
+    }
+
+    /* Wrapper to center the "All" switch under the column title */
+    .th-switch {
+      display: flex;
+      justify-content: center;
+      margin-top: 7px;
+    }
+
+    /* Switch indeterminate = mixed state (some but not all checked) */
+    .switch input:indeterminate + .slider            { background: #aecbfa; }
+    .switch.popup-switch input:indeterminate + .slider { background: #81c995; }
+    .switch.menu-switch  input:indeterminate + .slider { background: #fcc934; }
+
+    tbody tr {
+      border-bottom: 1px solid #f1f3f4;
+      transition: background 0.1s;
+    }
+
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #f8f9fa; }
+
+    td {
+      padding: 12px 20px;
+      vertical-align: middle;
+    }
+
+    td:not(:first-child) { text-align: center; }
+
+    .service-name {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .service-icon {
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .service-icon img { display: block; }
+
+    .service-label { font-weight: 500; }
+    .service-host  { font-size: 11px; color: #80868b; }
+
+    /* Info icon in column headers */
+    .info-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1.5px solid #aaa;
+      font-size: 9px;
+      font-style: normal;
+      color: #80868b;
+      cursor: default;
+      margin-left: 4px;
+      vertical-align: middle;
+      line-height: 1;
+      position: relative;
+    }
+
+    .info-icon::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #3c4043;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 400;
+      white-space: normal;
+      width: max-content;
+      max-width: 220px;
+      padding: 5px 9px;
+      border-radius: 4px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0s;
+      z-index: 10;
+      line-height: 1.4;
+    }
+
+    .info-icon:hover::after {
+      opacity: 1;
+    }
+
+    /* Toggle switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+    }
+
+    .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: #dadce0;
+      border-radius: 20px;
+      transition: background 0.2s;
+    }
+
+    .slider::before {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      left: 3px;
+      top: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    }
+
+    input:checked + .slider { background: #1a73e8; }
+    input:checked + .slider::before { transform: translateX(16px); }
+
+    .switch.popup-switch input:checked + .slider { background: #188038; }
+    .switch.menu-switch  input:checked + .slider { background: #e37400; }
+    .switch.skip-switch  input:checked + .slider { background: #9334e6; }
+    .switch.skip-switch  input:indeterminate + .slider { background: #c58af9; }
+
+    /* Group header rows */
+    tr.group-header td {
+      padding: 8px 20px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #80868b;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e8eaed;
+    }
+
+    tr.group-header:not(:first-child) td {
+      border-top: 1px solid #e8eaed;
+    }
+
+
+    /* When intercept is off, dim service name + popup columns only;
+       menu column stays active so quick links can still be added. */
+    tr.disabled td:nth-child(1),
+    tr.disabled td:nth-child(3) {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    /* Saved toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: #323232;
+      color: #fff;
+      font-size: 13px;
+      padding: 10px 20px;
+      border-radius: 4px;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .card .select-field {
+      font-size: 13px;
+      color: #202124;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      padding: 6px 30px 6px 10px;
+      background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235f6368'/%3E%3C/svg%3E") no-repeat right 10px center;
+      appearance: none;
+      cursor: pointer;
+      outline: none;
+      min-width: 160px;
+    }
+
+    .card .select-field:focus { border-color: #1a73e8; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <img src="icons/icon.png" width="32" height="32" alt="">
+      <h1>Google Account Chooser</h1>
+    </header>
+    <p class="subtitle">Configure which Google services are intercepted and how they open.</p>
+
+    <!-- General -->
+    <div class="card">
+      <div class="card-header"><h2>General</h2></div>
+      <div class="card-row">
+        <div>
+          <div class="label">Enable extension</div>
+          <div class="hint">Temporarily pause all interception without changing service settings.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="global-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Popup -->
+    <div class="card">
+      <div class="card-header"><h2>Popup</h2></div>
+      <div class="card-row">
+        <div>
+          <div class="label">Window placement</div>
+          <div class="hint">Center — popup appears centered on your screen. Tiles — each popup cascades offset from the previous one. Custom — remembers the position you last moved each service popup to.</div>
+        </div>
+        <select class="select-field" id="popup-placement">
+          <option value="center">Center</option>
+          <option value="tiles">Tiles</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+
+      <div class="card-row">
+        <div>
+          <div class="label">Window size</div>
+          <div class="hint">Default — 1024×768. Large — 75% of the current window. Full screen — matches the current window size. Custom — starts at 1024×768 and remembers the size you resize each service popup to.</div>
+        </div>
+        <select class="select-field" id="popup-size">
+          <option value="default">Default</option>
+          <option value="large">Large</option>
+          <option value="full">Full screen</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+
+    </div>
+
+    <!-- Menu -->
+    <div class="card">
+      <div class="card-header"><h2>Menu</h2></div>
+      <div class="card-row">
+        <div>
+          <div class="label">Show title</div>
+          <div class="hint">Show the "Google Account Chooser" heading at the top of the popup.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="show-popup-title">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="card-row">
+        <div>
+          <div class="label">Show services</div>
+          <div class="hint">Show the quick-launch service buttons in the extension popup.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="show-menu-services">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="card-row">
+        <div>
+          <div class="label">Show names below icons</div>
+          <div class="hint">Display service name labels below icons (or next to icons in list view).</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="show-menu-titles">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Show options</div>
+          <div class="hint">Show the "Manage services &amp; popup settings" link in the extension popup.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="show-menu-options">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Per-service table -->
+    <div class="services-card">
+      <div class="services-card-header">
+        <h2>Services</h2>
+        <div class="services-card-header-cols">
+          <div class="header-col">
+            Intercept
+            <i class="info-icon" data-tip="Redirect clicks through Account Chooser so you can pick the right Google account">i</i>
+          </div>
+          <div class="header-col">
+            Popup
+            <i class="info-icon" data-tip="Open the service in a chromeless popup window instead of the current tab">i</i>
+          </div>
+          <div class="header-col">
+            Menu
+            <i class="info-icon" data-tip="Add a quick-launch button for this service in the extension popup">i</i>
+          </div>
+          <div class="header-col">
+            Skip
+            <i class="info-icon" data-tip="Skip account chooser when the URL already specifies a user account (authuser= or /u/N/)">i</i>
+          </div>
+        </div>
+      </div>
+      <table>
+        <thead class="visually-hidden">
+          <tr>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="service-list"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="toast">Settings saved</div>
+
+  <script src="services-data.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
