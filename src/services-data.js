@@ -8,6 +8,7 @@ function _icon(file) {
 
 const SERVICE_DEFS = {
   'mail.google.com':           { label: 'Gmail',        icon: _icon('gmail.webp')        },
+  'chat.google.com':           { label: 'Chat',         icon: _icon('chat.webp')         },
   'meet.google.com':           { label: 'Meet',         icon: _icon('meet.webp')         },
   'calendar.google.com':       { label: 'Calendar',     icon: _icon('calendar.webp')     },
   'drive.google.com':          { label: 'Drive',        icon: _icon('drive.webp')        },
@@ -15,7 +16,6 @@ const SERVICE_DEFS = {
   'sheets.google.com':         { label: 'Sheets',       icon: _icon('sheets.webp')       },
   'slides.google.com':         { label: 'Slides',       icon: _icon('slides.webp')       },
   'forms.google.com':          { label: 'Forms',        icon: _icon('forms.webp')        },
-  'chat.google.com':           { label: 'Chat',         icon: _icon('chat.webp')         },
   'keep.google.com':           { label: 'Keep',         icon: _icon('keep.webp')         },
   'contacts.google.com':       { label: 'Contacts',     icon: _icon('contacts.png')      },
   'classroom.google.com':      { label: 'Classroom',    icon: _icon('classroom.svg')     },
@@ -31,34 +31,39 @@ const SERVICE_DEFS = {
   'lookerstudio.google.com':   { label: 'Looker Studio',icon: _icon('lookerstudio.webp') },
   'colab.research.google.com': { label: 'Colab',        icon: _icon('colab.svg')         },
   'maps.google.com':           { label: 'Maps',         icon: _icon('maps.webp')         },
+  'gemini.google.com':         { label: 'Gemini',       icon: _icon('gemini.svg')        },
   'myaccount.google.com':      { label: 'My Account',   icon: _icon('google.webp')       },
 };
 
 const SERVICE_GROUPS = [
   {
+    id: 'workspace',
     label: 'Workspace',
     hosts: [
-      'mail.google.com', 'meet.google.com', 'calendar.google.com',
+      'mail.google.com', 'chat.google.com', 'meet.google.com', 'calendar.google.com',
       'drive.google.com', 'docs.google.com', 'sheets.google.com',
-      'slides.google.com', 'forms.google.com', 'chat.google.com',
-      'keep.google.com', 'contacts.google.com', 'classroom.google.com',
+      'slides.google.com', 'forms.google.com',
+      'keep.google.com', 'contacts.google.com',
       'sites.google.com', 'groups.google.com',
     ],
   },
   {
+    id: 'personal',
     label: 'Personal',
     hosts: [
-      'photos.google.com', 'voice.google.com', 'play.google.com',
-      'maps.google.com',
+      'gemini.google.com', 'photos.google.com', 'voice.google.com', 'play.google.com',
+      'maps.google.com', 'classroom.google.com',
     ],
   },
   {
+    id: 'account-storage',
     label: 'Account & Storage',
     hosts: [
       'myaccount.google.com', 'one.google.com', 'admin.google.com',
     ],
   },
   {
+    id: 'developer-business',
     label: 'Developer & Business',
     hosts: [
       'analytics.google.com', 'ads.google.com',

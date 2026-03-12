@@ -17,8 +17,8 @@ A Chrome extension that automatically routes Google service links through [Accou
 
 | Group | Services |
 |---|---|
-| Workspace | Gmail, Meet, Calendar, Drive, Docs, Sheets, Slides, Forms, Chat, Keep, Contacts, Classroom, Sites, Groups |
-| Personal | Photos, Voice, Play, Maps |
+| Workspace | Gmail, Chat, Meet, Calendar, Drive, Docs, Sheets, Slides, Forms, Keep, Contacts, Sites, Groups |
+| Personal | Gemini, Photos, Voice, Play, Maps, Classroom |
 | Account & Storage | My Account, One, Admin |
 | Developer & Business | Analytics, Ads, Looker Studio, Colab |
 
