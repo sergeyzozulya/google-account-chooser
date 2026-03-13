@@ -1,26 +1,55 @@
 {
   "manifest_version": 3,
   "name": "Google Account Chooser",
-  "version": "1.1",
+  "version": "1.1.1",
   "description": "Redirects Google service links (Gmail, Meet, Calendar, Drive, etc.) through Account Chooser so you can pick the right account.",
+  "minimum_chrome_version": "109",
   "permissions": ["webNavigation", "tabs", "storage"],
-  "host_permissions": ["*://*.google.com/*"],
+  "host_permissions": [
+    "*://accounts.google.com/*",
+    "*://mail.google.com/*",
+    "*://chat.google.com/*",
+    "*://meet.google.com/*",
+    "*://calendar.google.com/*",
+    "*://drive.google.com/*",
+    "*://docs.google.com/*",
+    "*://sheets.google.com/*",
+    "*://slides.google.com/*",
+    "*://forms.google.com/*",
+    "*://keep.google.com/*",
+    "*://contacts.google.com/*",
+    "*://classroom.google.com/*",
+    "*://sites.google.com/*",
+    "*://groups.google.com/*",
+    "*://photos.google.com/*",
+    "*://voice.google.com/*",
+    "*://play.google.com/*",
+    "*://one.google.com/*",
+    "*://admin.google.com/*",
+    "*://analytics.google.com/*",
+    "*://ads.google.com/*",
+    "*://lookerstudio.google.com/*",
+    "*://colab.research.google.com/*",
+    "*://maps.google.com/*",
+    "*://gemini.google.com/*",
+    "*://myaccount.google.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "icons": {
-    "16": "icons/icon.png",
-    "32": "icons/icon.png",
-    "48": "icons/icon.png",
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
     "128": "icons/icon.png"
   },
   "action": {
     "default_popup": "popup.html",
     "default_title": "Google Account Chooser",
     "default_icon": {
-      "16": "icons/icon.png",
-      "32": "icons/icon.png",
-      "48": "icons/icon.png",
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
       "128": "icons/icon.png"
     }
   },

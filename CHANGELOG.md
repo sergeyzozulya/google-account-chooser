@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.1] — 2026-03-13
+
+### Changed
+- `host_permissions` narrowed from `*://*.google.com/*` to explicit per-service hostnames — extension now declares exactly the 27 subdomains it accesses rather than all of `*.google.com`
+- `minimum_chrome_version` set to `109` (MV3 service workers)
+- Extension icons now ship as separate correctly-sized PNGs (16 × 16, 32 × 32, 48 × 48, 128 × 128) instead of a single 128 px file for all sizes
+
+---
+
 ## [1.1] — 2026-03-12
 
 ### Added
