@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0] — 2026-04-11
+
+### Added
+- Left border separators in Options table: Intercept and Menu columns now have visual separators
+
+### Changed
+- **Column reordering** in Options: Skip column moved before Menu column
+- **Intercept off behavior**: when a service's Intercept is unchecked, the Popup and Skip checkboxes are now hidden (previously they were only dimmed)
+- **Group Intercept off**: when a group's Intercept is unchecked, both the group's and its services' Popup/Skip checkboxes are hidden
+- **Independent Menu toggle**: toggling service or group Intercept checkbox no longer affects the Menu checkbox — Menu stays independent
+
+---
+
 ## [1.1.1] — 2026-03-13
 
 ### Changed

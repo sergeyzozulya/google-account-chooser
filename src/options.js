@@ -81,7 +81,7 @@ function renderRow(host, service) {
         </div>
       </div>
     </td>
-    <td>
+    <td class="col-intercept">
       <label class="switch">
         <input type="checkbox" data-host="${host}" data-field="intercept"
                ${service.intercept ? 'checked' : ''}>
@@ -96,16 +96,16 @@ function renderRow(host, service) {
       </label>
     </td>
     <td>
-      <label class="switch menu-switch">
-        <input type="checkbox" data-host="${host}" data-field="menu"
-               ${service.menu ? 'checked' : ''}>
-        <span class="slider"></span>
-      </label>
-    </td>
-    <td>
       <label class="switch skip-switch">
         <input type="checkbox" data-host="${host}" data-field="skipIfUserSet"
                ${service.skipIfUserSet ? 'checked' : ''}>
+        <span class="slider"></span>
+      </label>
+    </td>
+    <td class="col-menu">
+      <label class="switch menu-switch">
+        <input type="checkbox" data-host="${host}" data-field="menu"
+               ${service.menu ? 'checked' : ''}>
         <span class="slider"></span>
       </label>
     </td>
@@ -138,10 +138,10 @@ function renderGroupHeader(group) {
         </div>
       </div>
     </td>
-    <td><label class="switch"><input type="checkbox" data-group="${group.id}" data-field="intercept"><span class="slider"></span></label></td>
+    <td class="col-intercept"><label class="switch"><input type="checkbox" data-group="${group.id}" data-field="intercept"><span class="slider"></span></label></td>
     <td><label class="switch popup-switch"><input type="checkbox" data-group="${group.id}" data-field="popup"><span class="slider"></span></label></td>
-    <td><label class="switch menu-switch"><input type="checkbox" data-group="${group.id}" data-field="menu"><span class="slider"></span></label></td>
     <td><label class="switch skip-switch"><input type="checkbox" data-group="${group.id}" data-field="skipIfUserSet"><span class="slider"></span></label></td>
+    <td class="col-menu"><label class="switch menu-switch"><input type="checkbox" data-group="${group.id}" data-field="menu"><span class="slider"></span></label></td>
   `;
 
   for (const field of ['intercept', 'popup', 'menu', 'skipIfUserSet']) {
@@ -439,9 +439,6 @@ document.getElementById('service-list').addEventListener('change', (e) => {
     if (!group) return;
     for (const host of group.hosts.filter(h => state.services[h])) {
       state.services[host][field] = input.checked;
-      if (field === 'intercept' && !input.checked) {
-        state.services[host].popup = false;
-      }
     }
     render();
     syncAllSwitches();
@@ -456,10 +453,6 @@ document.getElementById('service-list').addEventListener('change', (e) => {
   const row = input.closest('tr');
   if (field === 'intercept') {
     row.classList.toggle('disabled', !input.checked);
-    if (!input.checked) {
-      state.services[host].popup = false;
-      row.querySelector('[data-field="popup"]').checked = false;
-    }
   }
 
   syncAllSwitches();

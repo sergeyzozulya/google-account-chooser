@@ -185,7 +185,6 @@
       text-align: left;
     }
 
-
     table {
       width: 100%;
       border-collapse: collapse;
@@ -193,6 +192,16 @@
 
     thead th:not(:first-child) {
       width: 100px;
+    }
+
+    thead th.col-intercept,
+    thead th.col-menu {
+      border-left: 1px solid var(--border-sub);
+    }
+
+    td.col-intercept,
+    td.col-menu {
+      border-left: 1px solid var(--border-sub);
     }
 
     /* Wrapper to center the "All" switch under the column title */
@@ -258,7 +267,6 @@
       margin-left: 4px;
       vertical-align: middle;
       line-height: 1;
-      position: relative;
     }
 
     .info-icon::after {
@@ -424,12 +432,19 @@
     #add-group-btn:hover { text-decoration: underline; }
 
 
-    /* When intercept is off, dim service name + popup columns only;
-       menu column stays active so quick links can still be added. */
-    tr.disabled td:nth-child(1),
-    tr.disabled td:nth-child(3) {
+    /* When intercept is off, dim service name column and hide Popup/Skip switches. */
+    tr.disabled td:first-child {
       opacity: 0.4;
-      pointer-events: none;
+    }
+
+    tr.disabled td:has([data-field="popup"]) .switch,
+    tr.disabled td:has([data-field="skipIfUserSet"]) .switch {
+      visibility: hidden;
+    }
+
+    tr.group-header:not(:has([data-field="intercept"]:checked)) td:has([data-field="popup"]) .switch,
+    tr.group-header:not(:has([data-field="intercept"]:checked)) td:has([data-field="skipIfUserSet"]) .switch {
+      visibility: hidden;
     }
 
     /* Saved toast */
@@ -576,10 +591,10 @@
         <thead>
           <tr>
             <th>Services</th>
-            <th>Intercept <i class="info-icon" data-tip="Redirect clicks through Account Chooser so you can pick the right Google account">i</i></th>
+            <th class="col-intercept">Intercept <i class="info-icon" data-tip="Redirect clicks through Account Chooser so you can pick the right Google account">i</i></th>
             <th>Popup <i class="info-icon" data-tip="Open the service in a chromeless popup window instead of the current tab">i</i></th>
-            <th>Menu <i class="info-icon" data-tip="Add a quick-launch button for this service in the extension popup">i</i></th>
             <th>Skip <i class="info-icon" data-tip="Skip account chooser when the URL already specifies a user account (authuser= or /u/N/)">i</i></th>
+            <th class="col-menu"><span>Menu</span> <i class="info-icon" data-tip="Add a quick-launch button for this service in the extension popup">i</i></th>
           </tr>
         </thead>
         <tbody id="service-list"></tbody>
