@@ -20,7 +20,7 @@ A Chrome extension that automatically routes Google service links through [Accou
 **Quick-launch menu**
 - Per-service **Menu** toggle — adds the service as a quick-launch icon in the extension popup
 - Popup appearance options: show/hide the title, the service icon grid, group separators, and service name labels
-- **Keyboard navigation**: use arrow keys to navigate between services (toggleable in Options → Menu)
+- Keyboard navigation: use arrow keys to navigate between services (toggleable in Options → Menu)
 
 **Service organization**
 - Group management: add, rename, and delete groups; at least one group is always kept
