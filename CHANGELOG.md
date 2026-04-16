@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0] — 2026-04-16
+
+### Added
+- **Keyboard navigation** in popup: use arrow keys to navigate between services, Home/End to jump to first/last; first service is focused on popup open
+- **Keyboard navigation toggle** in Options → Menu: enable/disable the keyboard navigation feature (enabled by default)
+
+---
+
 ## [1.2.0] — 2026-04-11
 
 ### Added

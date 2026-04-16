@@ -3,7 +3,7 @@
 const menuEl = document.getElementById('service-menu');
 
 chrome.storage.sync.get(
-  { showPopupTitle: true, showMenuTitles: true, showMenuServices: true, showMenuGroups: true, showMenuOptions: true, groups: null, services: {} },
+  { showPopupTitle: true, showMenuTitles: true, showMenuServices: true, showMenuGroups: true, showMenuOptions: true, keyboardNav: true, groups: null, services: {} },
   (data) => {
     const activeGroups = data.groups || SERVICE_GROUPS;
 
@@ -34,7 +34,7 @@ chrome.storage.sync.get(
     document.querySelector('header').style.display = showTitle ? '' : 'none';
 
     if (showServices) {
-      renderMenu(groups, data.showMenuTitles, data.showMenuGroups);
+      renderMenu(groups, data.showMenuTitles, data.showMenuGroups, data.keyboardNav);
       menuEl.style.display = '';
     }
 
@@ -43,7 +43,7 @@ chrome.storage.sync.get(
   }
 );
 
-function renderMenu(groups, showTitles, showGroups) {
+function renderMenu(groups, showTitles, showGroups, keyboardNav) {
   const btnHtml = (s) => `
     <button class="svc-icon-btn" data-url="https://${s.host}/" title="${s.label}">
       <span class="ico">${s.icon}</span>
@@ -67,8 +67,70 @@ function renderMenu(groups, showTitles, showGroups) {
       chrome.tabs.create({ url: btn.dataset.url });
     });
   });
+
+  if (keyboardNav) initKeyboardNav();
 }
 
 document.getElementById('options-btn').addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });
+
+function initKeyboardNav() {
+  const buttons = Array.from(menuEl.querySelectorAll('button[data-url]'));
+  if (buttons.length === 0) return;
+
+  const getIndex = () => buttons.indexOf(document.activeElement);
+
+  function getRowCols() {
+    const rows = [];
+    let currentRow = -1;
+    let currentY = -1;
+    buttons.forEach((btn, i) => {
+      const y = Math.round(btn.getBoundingClientRect().top);
+      if (y !== currentY) {
+        currentRow++;
+        currentY = y;
+        rows[currentRow] = [];
+      }
+      rows[currentRow].push(i);
+    });
+    return rows;
+  }
+
+  menuEl.addEventListener('keydown', (e) => {
+    const rows = getRowCols();
+    const rowIndex = rows.findIndex(row => row.includes(getIndex()));
+    const colIndex = rowIndex >= 0 ? rows[rowIndex].indexOf(getIndex()) : 0;
+    let idx = getIndex();
+
+    switch (e.key) {
+      case 'ArrowRight':
+        if (colIndex < rows[rowIndex].length - 1) idx = rows[rowIndex][colIndex + 1];
+        else idx = rows[rowIndex][0];
+        break;
+      case 'ArrowLeft':
+        if (colIndex > 0) idx = rows[rowIndex][colIndex - 1];
+        else idx = rows[rowIndex][rows[rowIndex].length - 1];
+        break;
+      case 'ArrowDown':
+        if (rowIndex < rows.length - 1) {
+          idx = rows[rowIndex + 1][Math.min(colIndex, rows[rowIndex + 1].length - 1)];
+        }
+        break;
+      case 'ArrowUp':
+        if (rowIndex > 0) {
+          idx = rows[rowIndex - 1][Math.min(colIndex, rows[rowIndex - 1].length - 1)];
+        }
+        break;
+      case 'Home':       idx = rows[0][0]; break;
+      case 'End':        idx = rows[rows.length - 1][rows[rows.length - 1].length - 1]; break;
+      default: return;
+    }
+
+    e.preventDefault();
+    buttons[idx].focus();
+  });
+
+  menuEl.tabIndex = 0;
+  requestAnimationFrame(() => buttons[0].focus());
+}

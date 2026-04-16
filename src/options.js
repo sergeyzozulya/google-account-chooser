@@ -16,6 +16,7 @@ let state = {
   showMenuTitles: true,
   showMenuServices: true,
   showMenuGroups: true,
+  keyboardNav: true,
   groups: [],     // array of { label, hosts[] }
   services: {},   // host → { intercept, popup, menu }
 };
@@ -50,6 +51,7 @@ function save() {
     showMenuTitles: state.showMenuTitles,
     showMenuServices: state.showMenuServices,
     showMenuGroups: state.showMenuGroups,
+    keyboardNav: state.keyboardNav,
     groups: state.groups.map(g => ({ id: g.id, label: g.label, hosts: [...g.hosts] })),
     services: toSave,
   });
@@ -415,6 +417,11 @@ document.getElementById('show-menu-groups').addEventListener('change', (e) => {
   save();
 });
 
+document.getElementById('keyboard-nav').addEventListener('change', (e) => {
+  state.keyboardNav = e.target.checked;
+  save();
+});
+
 
 document.getElementById('add-group-btn').addEventListener('click', addGroup);
 
@@ -462,7 +469,7 @@ document.getElementById('service-list').addEventListener('change', (e) => {
 // ── Init ───────────────────────────────────────────────────────────────────
 
 chrome.storage.sync.get(
-  { enabled: true, popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, showMenuTitles: true, showMenuServices: true, showMenuGroups: true, groups: null, services: {} },
+  { enabled: true, popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, showMenuTitles: true, showMenuServices: true, showMenuGroups: true, keyboardNav: true, groups: null, services: {} },
   (data) => {
     state.enabled = data.enabled;
     state.popupPlacement = data.popupPlacement;
@@ -471,6 +478,7 @@ chrome.storage.sync.get(
     state.showMenuTitles = data.showMenuTitles;
     state.showMenuServices = data.showMenuServices;
     state.showMenuGroups = data.showMenuGroups;
+    state.keyboardNav = data.keyboardNav;
     state.groups = data.groups
       ? reconcileGroups(data.groups.map(g => ({ id: g.id || newGroupId(), label: g.label, hosts: [...g.hosts] })))
       : SERVICE_GROUPS.map(g => ({ id: g.id, label: g.label, hosts: [...g.hosts] }));
@@ -494,6 +502,7 @@ chrome.storage.sync.get(
     document.getElementById('show-menu-titles').checked = state.showMenuTitles;
     document.getElementById('show-menu-services').checked = state.showMenuServices;
     document.getElementById('show-menu-groups').checked = state.showMenuGroups;
+    document.getElementById('keyboard-nav').checked = state.keyboardNav;
 
     syncMenuServicesDependents();
     render();
