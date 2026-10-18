@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="promo.css">
+  <style>
+    header { position: absolute; top: 38px; left: 56px; right: 56px; display: flex; justify-content: space-between; align-items: center; }
+    header .brand span { font-size: 22px; }
+    header .mono { font-size: 11px; color: var(--ink-2); }
+
+    .eyebrow { position: absolute; top: 128px; left: 56px; }
+    h1 { position: absolute; top: 150px; left: 56px; font-size: 104px; line-height: .88; }
+    p.lede { position: absolute; top: 456px; left: 56px; width: 490px; font-size: 16.5px; line-height: 1.55; color: var(--ink-2); }
+
+    .features { position: absolute; left: 56px; width: 560px; bottom: 50px; border-top: 1.5px solid var(--ink); padding-top: 18px; display: flex; }
+    .features div { width: 187px; }
+    .features .mono { font-size: 10px; letter-spacing: .1em; color: var(--muted); }
+    .features .serif { font-size: 21px; line-height: 1.1; margin-top: 10px; }
+
+    /* The launcher popup and, overlapping it, the popup with dashboard sections (as in popup.png) */
+    .shot.launcher { top: 120px; left: 646px; width: 300px; height: 566px; }
+    .shot.sections { top: 168px; left: 874px; width: 350px; height: 566px; }
+  </style>
+</head>
+<body class="grid">
+  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+
+  <header>
+    <div class="brand"><img src="/images/icon.svg" width="44" height="44" alt=""><span>Google Account Chooser (and Dashboard)</span></div>
+    <div class="mono">02 / 03 — Popup</div>
+  </header>
+
+  <div class="eyebrow mono">A calmer way to switch</div>
+  <h1 class="serif">One popup,<br><em>every Google</em><br>service.</h1>
+  <p class="lede">Click any Gmail, Drive, Calendar or Meet link and Account Chooser asks which account first. The popup — or Chrome's side panel — adds your accounts, search and open tabs.</p>
+
+  <div class="features">
+    <div><div class="mono">01</div><div class="serif">Intercepts links<br>before they load</div></div>
+    <div><div class="mono">02</div><div class="serif">Launcher for<br>26 Google apps</div></div>
+    <div><div class="mono">03</div><div class="serif">Popup or<br>side panel</div></div>
+  </div>
+
+  <div class="shot launcher"><img src="/_capture/popup.png" alt=""></div>
+  <div class="shot sections fade"><img src="/_capture/popup-sections.png" alt=""></div>
+</body>
+</html>

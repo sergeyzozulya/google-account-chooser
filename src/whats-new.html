@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light dark">
+  <title>What's new — Google Account Chooser (and Dashboard)</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #fff;
+      --bg-page:    #f8f9fa;
+      --text:       #202124;
+      --text-med:   #3c4043;
+      --text-low:   #5f6368;
+      --border:     #e8eaed;
+      --hover:      #f1f3f4;
+      --accent:     #1a73e8;
+      --code-bg:    #f1f3f4;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:         #2d2e31;
+        --bg-page:    #202124;
+        --text:       #e8eaed;
+        --text-med:   #bdc1c6;
+        --text-low:   #9aa0a6;
+        --border:     #3c4043;
+        --hover:      #3c4043;
+        --accent:     #8ab4f8;
+        --code-bg:    #3c4043;
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      color: var(--text);
+      background: var(--bg-page);
+    }
+
+    .page { max-width: 1200px; margin: 0 auto; padding: 32px 24px 60px; }
+
+    header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    header h1 { font-size: 22px; font-weight: 400; }
+    header .version { color: var(--text-low); font-size: 14px; }
+    header nav { margin-left: auto; display: flex; gap: 4px; }
+
+    /* Same icons as the Settings and dashboard headers */
+    header nav a {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      color: var(--text-low);
+    }
+
+    header nav a:hover { background: var(--hover); }
+
+    /* Screenshot slider */
+    .slider {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg);
+      aspect-ratio: 1280 / 800;
+    }
+
+    .slides { display: flex; height: 100%; transition: transform .35s ease; }
+    .slides img { flex: 0 0 100%; width: 100%; height: 100%; display: block; }
+
+    .slider button.arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      background: var(--bg);
+      color: var(--text-med);
+      font-size: 20px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+      opacity: .9;
+    }
+
+    .slider button.arrow:hover { opacity: 1; }
+    .slider .prev { left: 12px; }
+    .slider .next { right: 12px; }
+
+    .dots { display: flex; justify-content: center; gap: 8px; margin: 14px 0 32px; }
+    .dots button { width: 8px; height: 8px; padding: 0; border: none; border-radius: 50%; background: var(--border); cursor: pointer; }
+    .dots button[aria-current="true"] { background: var(--accent); }
+
+    /* Changelog */
+    .changelog {
+      padding: 8px 32px 28px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg);
+      line-height: 1.55;
+    }
+
+    .changelog h2 { margin-top: 24px; font-size: 18px; font-weight: 500; }
+    .changelog h3 { margin-top: 16px; font-size: 13px; font-weight: 600; color: var(--text-low); text-transform: uppercase; letter-spacing: .05em; }
+    .changelog ul { margin: 8px 0 0 20px; }
+    .changelog li { margin: 4px 0; color: var(--text-med); }
+    .changelog p { margin-top: 8px; color: var(--text-med); }
+    .changelog hr { margin-top: 24px; border: none; border-top: 1px solid var(--border); }
+    .changelog code { padding: 1px 4px; border-radius: 3px; background: var(--code-bg); font-size: 12px; }
+    .changelog a { color: var(--accent); }
+
+    footer { display: flex; justify-content: center; gap: 24px; margin-top: 24px; font-size: 13px; }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <img src="icons/icon.png" width="32" height="32" alt="">
+      <h1>What's new</h1>
+      <span class="version" id="version"></span>
+      <nav>
+        <a href="dashboard.html" title="Open dashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/>
+            <rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>
+          </svg>
+        </a>
+        <a href="options.html" title="Settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33
+                     1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33
+                     l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09
+                     A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06
+                     A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51
+                     a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9
+                     a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </a>
+      </nav>
+    </header>
+
+    <div class="slider" id="slider">
+      <div class="slides" id="slides">
+        <img src="screens/screen1.png" alt="Dashboard">
+        <img src="screens/screen2.png" alt="Popup">
+        <img src="screens/screen3.png" alt="Settings">
+      </div>
+      <button class="arrow prev" id="prev" title="Previous">‹</button>
+      <button class="arrow next" id="next" title="Next">›</button>
+    </div>
+    <div class="dots" id="dots"></div>
+
+    <article class="changelog" id="changelog"></article>
+
+    <footer>
+      <a href="https://itsua.com/gac/" target="_blank">Homepage</a>
+      <a href="https://github.com/sergeyzozulya/google-account-chooser" target="_blank">Support</a>
+    </footer>
+  </div>
+
+  <script src="whats-new.js"></script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; background: #f8f9fa; }
+    .columns { display: flex; align-items: flex-start; gap: 32px; padding: 40px; }
+    .column { display: flex; flex-direction: column; gap: 14px; width: 802px; }
+    .segment { position: relative; }
+    /* Segments are captured at 2× and shown at the Settings page's CSS width */
+    .segment img { display: block; width: 802px; }
+    /* Torn edge: page-coloured jagged strip over the cut; the two halves share one outline */
+    .segment svg { position: absolute; left: 0; width: 802px; height: 14px; }
+    .segment .tear-bottom { bottom: 0; }
+    .segment .tear-top { top: 0; }
+  </style>
+</head>
+<body>
+  <div class="columns" id="columns"></div>
+  <script>
+    // Layout written by build-images.mjs: columns of { src, torn } segments
+    const W = 802, H = 14, STEP = 9;
+
+    // Deterministic jagged outline so every build looks the same
+    let seed = 7;
+    const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    function tearPoints() {
+      const pts = [];
+      for (let x = 0; x <= W; x += STEP) pts.push([x, 2 + random() * (H - 4)]);
+      return pts;
+    }
+    const svg = (cls, d) => `<svg class="${cls}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${d}" fill="#f8f9fa"/></svg>`;
+
+    fetch('/_capture/options-columns.json').then(r => r.json()).then(columns => {
+      let tear = null; // outline shared by the halves on either side of a cut
+      document.getElementById('columns').innerHTML = columns.map(segments => `
+        <div class="column">${segments.map(seg => {
+          let edges = '';
+          if (tear) {
+            edges += svg('tear-top', `M0 0 L${W} 0 ` + [...tear].reverse().map(([x, y]) => `L${x} ${y}`).join(' ') + ' Z');
+            tear = null;
+          }
+          if (seg.torn) {
+            tear = tearPoints();
+            edges += svg('tear-bottom', `M0 ${H} ` + tear.map(([x, y]) => `L${x} ${y}`).join(' ') + ` L${W} ${H} Z`);
+          }
+          return `<div class="segment"><img src="${seg.src}" alt="">${edges}</div>`;
+        }).join('')}</div>`).join('');
+    });
+  </script>
+</body>
+</html>

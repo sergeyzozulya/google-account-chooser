@@ -71,3 +71,116 @@ const SERVICE_GROUPS = [
     ],
   },
 ];
+
+// Account index or email named by a URL's /u/N/ path or authuser= param, or null
+function accountFromUrl(url) {
+  try {
+    const u = new URL(url);
+    const m = u.pathname.match(/\/u\/(\d+)(\/|$)/);
+    return m ? m[1] : u.searchParams.get('authuser');
+  } catch {
+    return null;
+  }
+}
+
+// Services whose account-specific URL uses a /u/N/ path; the rest get ?authuser=N
+const ACCOUNT_URLS = {
+  'mail.google.com':      n => `https://mail.google.com/mail/u/${n}/`,
+  'calendar.google.com':  n => `https://calendar.google.com/calendar/u/${n}/r`,
+  'drive.google.com':     n => `https://drive.google.com/drive/u/${n}/my-drive`,
+  'docs.google.com':      n => `https://docs.google.com/document/u/${n}/`,
+  'sheets.google.com':    n => `https://docs.google.com/spreadsheets/u/${n}/`,
+  'slides.google.com':    n => `https://docs.google.com/presentation/u/${n}/`,
+  'forms.google.com':     n => `https://docs.google.com/forms/u/${n}/`,
+  'keep.google.com':      n => `https://keep.google.com/u/${n}/`,
+  'photos.google.com':    n => `https://photos.google.com/u/${n}/`,
+  'myaccount.google.com': n => `https://myaccount.google.com/u/${n}/`,
+};
+
+function accountServiceUrl(host, n) {
+  return ACCOUNT_URLS[host] ? ACCOUNT_URLS[host](n) : `https://${host}/?authuser=${n}`;
+}
+
+// Dashboard sections in default order; width is a share of the page row
+const DASHBOARD_SECTIONS = [
+  // Chrome-style bookmarks bar; dashboard only, there's no room for its menus in the popup
+  { id: 'bookmarks', label: 'Bookmarks',   visible: true, width: 'full', popup: false },
+  { id: 'search',   label: 'Search',       visible: true, width: 'full'  },
+  { id: 'accounts', label: 'Accounts',     visible: true, width: 'full'  },
+  { id: 'tabs',     label: 'Open tabs',    visible: true, width: 'third' },
+  { id: 'recent',   label: 'Recent files', visible: true, width: 'third' },
+  { id: 'stats',    label: 'Statistics',   visible: true, width: 'third' },
+];
+
+// Toolbar popup layout: the launcher plus any dashboard sections, in saved order
+function popupOrder(saved) {
+  const ids = ['launcher', ...DASHBOARD_SECTIONS.filter(d => d.popup !== false).map(d => d.id)];
+  const known = (saved || []).filter(id => ids.includes(id));
+  return [...known, ...ids.filter(id => !known.includes(id))];
+}
+
+// Line icons for dashboard sections, shown on the dashboard and in Options
+const SECTION_ICON_PATHS = {
+  launcher: [5, 12, 19].flatMap(y => [5, 12, 19].map(x => `<circle cx="${x}" cy="${y}" r="1"/>`)).join(''),
+  search:   '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  accounts: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  tabs:     '<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="4" x2="9" y2="9"/>',
+  bookmarks: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
+  recent:   '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/>',
+  stats:    '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+};
+
+function sectionIcon(id, size = 18) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${SECTION_ICON_PATHS[id]}</svg>`;
+}
+
+// Saved section settings ({ id, visible, width, title }[]) in saved order, plus any sections added since
+function dashboardSections(saved) {
+  const known = (saved || []).filter(s => DASHBOARD_SECTIONS.some(d => d.id === s.id));
+  const missing = DASHBOARD_SECTIONS.filter(d => !known.some(s => s.id === d.id));
+  return [...known, ...missing].map(s => {
+    const def = DASHBOARD_SECTIONS.find(d => d.id === s.id);
+    return { id: s.id, label: def.label, visible: s.visible ?? def.visible, width: s.width ?? def.width, title: s.title ?? true };
+  });
+}
+
+// Stable key for per-account settings (nickname, order): email when known, else #index
+const accountKey = (a) => a.email || `#${a.index}`;
+
+// Accounts sorted by the saved key order; accounts not in it keep their place after the rest
+function orderAccounts(accounts, order) {
+  const rank = (a) => {
+    const i = (order || []).indexOf(accountKey(a));
+    return i === -1 ? Infinity : i;
+  };
+  return [...accounts].sort((a, b) => rank(a) - rank(b));
+}
+
+// Dashboard title: 'auto' (date and time in the browser's locale), 'text:…' (static text), or a
+// format string with tokens dddd ddd D DD MMMM MMM M MM YYYY YY H HH h hh mm ss A; [text] is printed as is
+const TITLE_FORMATS = ['auto', 'dddd D MMMM · HH:mm', 'ddd D MMM YYYY · HH:mm', 'dddd D MMMM', 'HH:mm:ss'];
+
+function formatDate(date, format) {
+  if (format.startsWith('text:')) return format.slice(5);
+  if (format === 'auto') {
+    const day = date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+    return `${day} · ${time}`;
+  }
+  const name = (options) => date.toLocaleDateString(undefined, options);
+  const pad = (n) => String(n).padStart(2, '0');
+  const h12 = date.getHours() % 12 || 12;
+  const tokens = {
+    dddd: () => name({ weekday: 'long' }),  ddd: () => name({ weekday: 'short' }),
+    MMMM: () => name({ month: 'long' }),    MMM: () => name({ month: 'short' }),
+    MM:   () => pad(date.getMonth() + 1),   M:   () => date.getMonth() + 1,
+    YYYY: () => date.getFullYear(),         YY:  () => pad(date.getFullYear() % 100),
+    DD:   () => pad(date.getDate()),        D:   () => date.getDate(),
+    HH:   () => pad(date.getHours()),       H:   () => date.getHours(),
+    hh:   () => pad(h12),                   h:   () => h12,
+    mm:   () => pad(date.getMinutes()),     ss:  () => pad(date.getSeconds()),
+    A:    () => (date.getHours() < 12 ? 'AM' : 'PM'),
+  };
+  return format.replace(/\[([^\]]*)\]|dddd|ddd|D{1,2}|M{1,4}|YYYY|YY|HH?|hh?|mm|ss|A/g,
+    (match, literal) => literal ?? tokens[match]());
+}

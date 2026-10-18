@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light dark">
+  <title>Google Account Chooser (and Dashboard) — Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #fff;
+      --bg-page:    #f8f9fa;
+      --text:       #202124;
+      --text-med:   #3c4043;
+      --text-low:   #5f6368;
+      --text-muted: #80868b;
+      --border:     #e8eaed;
+      --border-sub: #f1f3f4;
+      --hover:      #f1f3f4;
+      --accent:     #1a73e8;
+      --accent-bg:  #e8f0fe;
+      --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235f6368'/%3E%3C/svg%3E");
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:         #2d2e31;
+        --bg-page:    #202124;
+        --text:       #e8eaed;
+        --text-med:   #bdc1c6;
+        --text-low:   #9aa0a6;
+        --text-muted: #80868b;
+        --border:     #3c4043;
+        --border-sub: #35363a;
+        --hover:      #3c4043;
+        --accent:     #8ab4f8;
+        --accent-bg:  #1a3c6e;
+        --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239aa0a6'/%3E%3C/svg%3E");
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      color: var(--text);
+      background: var(--bg-page);
+      min-height: 100vh;
+    }
+
+    button, input, select { font: inherit; color: inherit; }
+
+    [hidden] { display: none !important; }
+
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 24px 60px;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .page-header .icon-btn + .icon-btn { margin-left: -8px; } /* header icons 4px apart */
+
+    .page-header h1 {
+      font-size: 22px;
+      font-weight: 400;
+      flex: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .icon-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-radius: 50%;
+      color: var(--text-low);
+    }
+
+    .icon-btn:hover { background: var(--hover); }
+
+    .text-btn {
+      border: none;
+      background: none;
+      color: var(--accent);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    .text-btn:hover { background: var(--accent-bg); }
+
+    .section-head .text-btn { margin: -4px 0; }
+
+    /* Panel actions (Clear, Reset) appear while hovering the panel */
+    .panel .section-head .text-btn { opacity: 0; transition: opacity .1s; }
+    .panel:hover .section-head .text-btn,
+    .panel .section-head .text-btn:focus-visible { opacity: 1; }
+
+    /* Search */
+    /* Popup mode (dashboard.html?popup inside the toolbar popup) */
+    body.embedded { min-height: 0; background: var(--bg); }
+    .embedded .page { padding: 0 16px 16px; }
+    .embedded .page-header,
+    .embedded #accounts-hint,
+    .embedded #account-stepper { display: none; }
+    .embedded #sections { gap: 16px; }
+    .embedded #sections > * { grid-column: span 12 !important; }
+    .embedded #search { flex-wrap: wrap; }
+    .embedded .search-field { flex-basis: 100%; }
+    .embedded #search > span > button,
+    .embedded #search .split-main { padding-top: 7px; padding-bottom: 7px; }
+    .embedded .panel-body { max-height: 220px; }
+    .embedded #accounts { gap: 8px; }
+
+    /* Account launcher expanded inside its card (popup mode) */
+    .launcher.inline {
+      position: static;
+      display: block;
+      width: 100%;
+      border: none;
+      border-top: 1px solid var(--border-sub);
+      border-radius: 0 0 8px 8px;
+      box-shadow: none;
+    }
+
+    /* Section title hidden (Options → Dashboard → Sections → Title); panel actions go with it */
+    .no-title > .section-head { display: none; }
+
+    /* Sections: 12-column grid; each section's span comes from Options → Dashboard */
+    #sections {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 28px 16px;
+    }
+
+    #sections > * { grid-column: span 12; }
+
+    @media (max-width: 900px) {
+      #sections > * { grid-column: span 12 !important; }
+    }
+
+    #search {
+      display: flex;
+      gap: 8px;
+    }
+
+    .search-field {
+      position: relative;
+      display: flex;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .search-field svg {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-low);
+      pointer-events: none;
+    }
+
+    #q {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 16px 10px 44px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: var(--bg);
+      outline: none;
+    }
+
+    #q:focus { border-color: var(--accent); }
+
+    /* Gmail / Drive split buttons: the main part searches the chosen account, ▾ picks the account */
+    .split { position: relative; display: flex; min-width: 0; }
+
+    #search .split-main {
+      max-width: 240px;
+      padding: 0 14px 0 18px;
+      border-right: none;
+      border-radius: 24px 0 0 24px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #search .split-toggle {
+      width: 36px;
+      padding: 0;
+      border-radius: 0 24px 24px 0;
+      background: var(--bg) var(--select-arrow) no-repeat 12px center;
+    }
+
+    #search .split-toggle:hover { background: var(--hover) var(--select-arrow) no-repeat 12px center; }
+    #search .split-toggle[aria-expanded="true"] { border-color: var(--accent); }
+
+    .picker-option span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .picker-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 0;
+      z-index: 20;
+      min-width: 100%;
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 4px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, .18);
+    }
+
+    #search .picker-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 0;
+      background: none;
+      font-weight: 400;
+      text-align: left;
+      outline: none;
+    }
+
+    #search .picker-option:hover,
+    #search .picker-option:focus { background: var(--hover); }
+    #search .picker-option[aria-selected="true"] { color: var(--accent); font-weight: 500; }
+
+    #search button {
+      padding: 0 18px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: var(--bg);
+      cursor: pointer;
+      font-weight: 400;
+    }
+
+    #search button:hover { background: var(--hover); }
+
+    /* Default search (Enter) */
+    #search .search-default { font-weight: 600; }
+
+    /* Sections */
+    .section-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-head h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-low);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .section-head .hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      flex: 1;
+    }
+
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--text-low);
+    }
+
+    .card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    /* Accounts */
+    #accounts {
+      display: grid;
+      gap: 16px;
+    }
+
+    .acct-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+    }
+
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent-bg);
+      color: var(--accent);
+      font-weight: 600;
+      object-fit: cover;
+    }
+
+    /* Small account avatar next to account names in panels */
+    .avatar.sm { width: 18px; height: 18px; font-size: 10px; }
+
+    .acct-id { flex: 1; min-width: 0; }
+
+    .acct-name {
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .acct-email {
+      font-size: 12px;
+      color: var(--text-low);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .unread {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 50%;
+      background: none;
+      cursor: pointer;
+    }
+
+    .unread:hover { background: var(--hover); }
+    .unread img { width: 22px; height: 22px; }
+
+    /* No unread mail: grey Gmail icon, no badge */
+    .unread.empty-inbox img { filter: grayscale(1); opacity: .45; }
+    .unread.empty-inbox b { display: none; }
+
+    /* Same look as the toolbar icon badge (chrome.action badge in background.js) */
+    .unread b {
+      position: absolute;
+      right: 0;
+      bottom: 2px;
+      min-width: 16px;
+      height: 14px;
+      padding: 0 3px;
+      border-radius: 4px;
+      background: #d93025;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 14px;
+      text-align: center;
+    }
+
+    .launcher {
+      position: absolute;
+      z-index: 10;
+      width: 300px;
+      height: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, .18);
+    }
+
+    .panel .section-head {
+      padding: 12px 16px;
+      margin: 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-body {
+      max-height: 420px;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+
+    /* Same band as group headers in the Options services table */
+    .group-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      padding: 8px 16px 6px;
+      background: var(--bg-page);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .group-label:not(:first-child) { border-top: 1px solid var(--border); margin-top: 6px; }
+    .panel-body > .group-label:first-child { margin-top: -6px; }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 6px 16px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .row:hover { background: var(--hover); }
+    .group-label svg { flex-shrink: 0; }
+    .row img { width: 18px; height: 18px; flex-shrink: 0; }
+
+    .row .title {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+
+    .row .meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .empty {
+      padding: 16px;
+      font-size: 13px;
+      color: var(--text-low);
+      line-height: 1.5;
+    }
+
+    .empty .text-btn { margin-top: 8px; margin-left: -8px; }
+
+    /* Bookmarks bar and its folder menus, modelled on Chrome's */
+    .bookmark-bar {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      min-height: 32px;
+      padding: 6px 8px;
+      font-size: 12px;
+      color: var(--text-med);
+    }
+
+    .bm-items { display: flex; gap: 2px; flex: 1; min-width: 0; overflow: hidden; }
+
+    .bm-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      max-width: 180px;
+      height: 28px;
+      padding: 0 10px 0 8px;
+      border: none;
+      border-radius: 14px;
+      background: none;
+      cursor: pointer;
+      color: inherit;
+      white-space: nowrap;
+    }
+
+    .bm-btn:hover, .bm-btn[aria-expanded="true"] { background: var(--hover); }
+    .bm-btn span { overflow: hidden; text-overflow: ellipsis; }
+    .bm-btn img, .bm-btn svg, .bm-menu img, .bm-menu svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .bm-overflow { padding: 0 8px; }
+    .bookmark-bar .empty { padding: 6px 8px; font-size: 12px; }
+    .bookmark-bar .empty .text-btn { margin: 0 0 0 4px; }
+
+    .bm-menu {
+      position: absolute;
+      z-index: 30;
+      min-width: 200px;
+      max-width: 320px;
+      max-height: 70vh;
+      overflow-y: auto;
+      padding: 6px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+      font-size: 13px;
+    }
+
+    .bm-menu button {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 6px 16px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+    }
+
+    .bm-menu button:hover, .bm-menu button.open { background: var(--hover); }
+    .bm-menu button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bm-menu .chevron { width: 12px; height: 12px; color: var(--text-low); }
+    .bm-menu .empty { padding: 6px 16px; font-size: 13px; color: var(--text-muted); }
+    .bm-menu hr { margin: 6px 0; border: none; border-top: 1px solid var(--border); }
+
+    /* Statistics bars */
+    .bar-row {
+      display: grid;
+      grid-template-columns: 18px 110px 1fr 36px;
+      align-items: center;
+      gap: 10px;
+      padding: 5px 16px;
+      font-size: 13px;
+    }
+
+    .bar-row img { width: 18px; height: 18px; }
+    .bar-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar-row .count { text-align: right; color: var(--text-low); font-size: 12px; }
+
+    .bar {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--accent);
+      min-width: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <img src="icons/icon.png" width="32" height="32" alt="">
+      <h1 id="now"></h1>
+      <a class="icon-btn" href="whats-new.html" title="What's new">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>
+      </a>
+      <a id="options-btn" class="icon-btn" href="options.html" title="Options">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33
+                   1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33
+                   l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09
+                   A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06
+                   A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51
+                   a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9
+                   a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </a>
+    </header>
+
+    <main id="sections">
+      <form id="search" data-section="search">
+        <label class="search-field">
+          <input id="q" type="search" placeholder="Search" autocomplete="off">
+        </label>
+        <span id="search-buttons" style="display: contents"></span>
+      </form>
+
+      <section data-section="accounts">
+        <div class="section-head">
+          <h2>Accounts</h2>
+          <span class="hint" id="accounts-hint"></span>
+          <div class="stepper" id="account-stepper" hidden>
+            <button class="text-btn" id="account-remove" title="Remove account">−</button>
+            <button class="text-btn" id="account-add" title="Add account">+</button>
+          </div>
+        </div>
+        <div id="accounts"></div>
+      </section>
+
+      <section class="card panel" data-section="tabs">
+        <div class="section-head"><h2>Open tabs</h2></div>
+        <div class="panel-body" id="tabs"></div>
+      </section>
+
+      <section class="card panel" data-section="recent">
+        <div class="section-head">
+          <h2>Recent files</h2>
+          <span class="hint"></span>
+          <button class="text-btn" id="recent-clear" title="Hide files opened so far (browser history isn't changed)" hidden>Clear</button>
+        </div>
+        <div class="panel-body" id="recent"></div>
+      </section>
+
+      <section class="card panel" data-section="stats">
+        <div class="section-head">
+          <h2>Statistics</h2>
+          <span class="hint"></span>
+          <button class="text-btn" id="stats-reset">Reset</button>
+        </div>
+        <div class="panel-body" id="stats"></div>
+      </section>
+
+      <!-- Chrome-style bookmarks bar: bar items, » overflow, Other bookmarks on the right -->
+      <section class="card panel" data-section="bookmarks">
+        <div class="section-head"><h2>Bookmarks</h2></div>
+        <nav class="bookmark-bar" id="bookmark-bar" aria-label="Bookmarks"></nav>
+      </section>
+    </main>
+  </div>
+
+  <script src="services-data.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

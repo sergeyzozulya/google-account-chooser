@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.0.0] — 2026-10-18
+
+### Added
+- **Dashboard** page (popup header button, or icon in the Options header): one card per signed-in account with photo, email or nickname, Gmail unread count, and a launcher that opens services directly in that account
+- Dashboard **bookmarks bar** modelled on Chrome's: bar items, nested folder menus, » overflow and Other bookmarks; opens in the same tab (Ctrl/⌘-click for a new tab); dashboard only
+- Dashboard **search**: Google (default on Enter), plus Gmail and Drive split buttons that search a chosen account
+- Dashboard **Open tabs** and **Recent files** (Docs, Sheets, Slides, Forms from browser history), grouped by account, with a Clear button for recent files
+- Dashboard **Statistics**: launches per service and account
+- **Turn on** buttons for Recent files and Bookmarks request the optional `history`, `bookmarks` and `favicon` permissions only when used
+- Accounts detected from the Google session (Gmail feeds as fallback, manual count as last resort), cached locally and refreshed in the background
+- **Unread badge** on the toolbar icon: total Gmail unread across accounts, refreshed every 2 minutes and whenever the dashboard refreshes
+- Options → Dashboard: account order, nicknames and accounts per row; section order, width, visibility and title; header title (date-and-time presets, static text or a custom format); search buttons; recent files per account
+- **Show in popup** (Options → Popup): the launcher and any dashboard section (except Bookmarks) in the popup, in any order
+- **Dashboard in new tabs** (Options → General): new tabs open the dashboard, with an editable tab title (default "New tab")
+- **Toolbar icon opens** (Options → General): the popup (default) or the same content in Chrome's side panel, which stays open
+- Options page title and section titles stay visible while scrolling
+- **What's new** page with screenshots and this changelog, opened once after each update and from the ? icon in the Options header
+- `scripts/build-images.mjs` regenerates icons, screenshots and store images (with fictional data) from `images/icon.svg` and the extension pages
+- Permissions (no install warnings): `alarms`, `sidePanel`, and `declarativeNetRequestWithHostAccess` to remove the extension's Origin header from Google's account-list request
+
+### Changed
+- Renamed to **Google Account Chooser (and Dashboard)**; new icon
+- The popup title shows the dashboard title (date and time by default)
+- Options renamed to match Chrome's terms: **Menu** is now **Popup** (the toolbar popup), the **Popup** section is now **Window** (separate service windows), and in the services table **Popup** is now **Window** and **Menu** is now **Launcher**; **Enable extension** is now **Intercept Google links**
+- Launcher options (service groups, names below icons, keyboard navigation) moved to their own **Launcher** section and always apply, since the launcher also appears on the dashboard
+- Minimum Chrome version raised from 109 to 114 (side panel)
+
+---
+
 ## [1.3.0] — 2026-04-16
 
 ### Added

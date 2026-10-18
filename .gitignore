@@ -4,6 +4,7 @@
 .LSOverride
 
 # Build output
+src/_metadata/
 dist/
 build/
 *.zip

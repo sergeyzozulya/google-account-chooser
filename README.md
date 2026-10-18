@@ -1,34 +1,43 @@
-# Google Account Chooser
+# Google Account Chooser (and Dashboard)
 
 A Chrome extension that automatically routes Google service links through [Account Chooser](https://accounts.google.com/AccountChooser) so you can pick the right Google account before the page loads — no more accidentally opening Gmail or Drive in the wrong account.
 
 ## Features
 
-**Interception**
+**Account Chooser for Google links**
 - Intercepts navigation to 26 Google services and redirects through Account Chooser
-- Global on/off toggle — pause all interception without changing any per-service settings
+- **Intercept Google links** switch (Options → General) pauses all interception without changing per-service settings
 - Per-service **Intercept** toggle
+- Per-service **Skip** toggle — skips Account Chooser when the URL already specifies an account (`authuser=` or `/u/N/`)
+- Per-service **Window** toggle — opens the service in a separate chromeless window; placement (Center, Tiles, Custom) and size (Default, Large, Full screen, Custom) are set in Options → Window
 
-**Popup mode**
-- Per-service **Popup** toggle — opens the service in a chromeless popup window instead of the current tab
-- Window placement: Center, Tiles (each popup cascades offset from the previous), or Custom (remembers last position per service)
-- Window size: Default (1024×768), Large (75% of current window), Full screen, or Custom (remembers last size per service)
+**Dashboard**
+- One card per signed-in account: photo, email or nickname, Gmail unread count, and a launcher that opens any service directly in that account (no Account Chooser)
+- Chrome-style bookmarks bar: bar items, nested folder menus, » overflow and Other bookmarks; opens in the same tab (Ctrl/⌘-click for a new tab)
+- Search Google (default on Enter), or Gmail and Drive in a chosen account via split buttons
+- Open Google tabs and recent Docs/Sheets/Slides/Forms (from browser history), grouped by account
+- Statistics of the services and accounts you open through the extension
+- Bookmarks and Recent files need an extra permission, granted with **Turn on** in the section; nothing is requested at install
+- Accounts are detected from your Google session (falling back to Gmail feeds, then a manual count), cached, and refreshed in the background
+- Optionally replaces Chrome's New Tab page (Options → General), with an editable tab title
 
-**Skip**
-- Per-service **Skip** toggle — skips Account Chooser when the URL already specifies a user account (`authuser=` or `/u/N/`)
+**Popup and side panel**
+- The toolbar button opens a popup (default) or the same content in Chrome's side panel, which stays open (Options → General)
+- **Show in popup** (Options → Popup): the launcher and any dashboard section except Bookmarks, on or off and in any order
+- The popup title is the dashboard title
+- A badge on the toolbar icon shows the total Gmail unread count across accounts, refreshed every 2 minutes
 
-**Quick-launch menu**
-- Per-service **Menu** toggle — adds the service as a quick-launch icon in the extension popup
-- Popup appearance options: show/hide the title, the service icon grid, group separators, and service name labels
-- Keyboard navigation: use arrow keys to navigate between services (toggleable in Options → Menu)
+**Launcher**
+- Per-service **Launcher** toggle — which services the launcher shows (in the popup and in each dashboard account)
+- Options → Launcher: group separators, names below icons, keyboard navigation (arrow keys, Home/End)
+- Groups: add, rename, delete; drag and drop groups and services, including between groups
+- Column toggles on group rows flip Intercept / Window / Skip / Launcher for the whole group (indeterminate when mixed)
 
-**Service organization**
-- Group management: add, rename, and delete groups; at least one group is always kept
-- Drag-and-drop reordering of both groups and individual services; services can be moved between groups
-- Column-level group toggles: flip Intercept / Popup / Menu / Skip for all services in a group at once; shows indeterminate state when mixed
-
-**Storage**
-- All settings synced via `chrome.storage.sync`
+**Customization (Options → Dashboard)**
+- Accounts: order (drag and drop), nicknames, accounts per row
+- Sections: order (drag and drop), width, visibility and title for each section
+- Title: date-and-time presets, static text, or a custom format
+- Which search buttons appear, and how many recent files to show per account
 
 ## Supported Services
 
@@ -41,7 +50,7 @@ A Chrome extension that automatically routes Google service links through [Accou
 
 ## Installation
 
-**Requires Chrome 109 or later.**
+**Requires Chrome 114 or later.**
 
 ### From Chrome Web Store
 
@@ -56,39 +65,64 @@ A Chrome extension that automatically routes Google service links through [Accou
 
 ### Package
 
-Create a ZIP file of all extension files:
+```
+./package.sh
+```
 
-- `cd google-account-chooser/src`
-- `zip -r google-account-chooser.zip . --exclude "*.DS_Store" --exclude ".git/*"`
+Creates `dist/google-account-chooser-<version>.zip` from `src/`, using the version in `manifest.json` (excludes `.DS_Store` and Chrome's generated `_metadata/`).
 
-The ZIP should contain: manifest.json, background.js, popup.html, popup.js, options.html, options.js, services-data.js, and the icons/ folder.
+### Changelog
+
+[src/CHANGELOG.md](src/CHANGELOG.md) ships with the extension: the **What's new** page (opened once after each update, and from the ? icon in the Options header) shows it under a slider of the store screenshots in `src/screens/`.
+
+### Images
+
+Icons, UI screenshots and Chrome Web Store images are generated from `images/icon.svg`, the extension pages, and the templates in `scripts/images/`:
+
+```
+node scripts/build-images.mjs
+```
+
+Requires Node 22+ and Google Chrome (set `CHROME=/path/to/chrome` if it isn't in the default macOS location).
 
 ## Usage
 
-Once installed, clicking any link to a supported Google service will redirect you through Account Chooser. Use the extension popup to:
+Once installed, clicking a link to a supported Google service shows Account Chooser first. From the toolbar button you can:
 
-- Toggle the extension on/off
-- Launch any supported service directly through Account Chooser
-- Open the Options page to configure per-service behavior
+- Launch any service (through Account Chooser)
+- See the sections you added to the popup: accounts with unread mail and per-account launchers, search, open tabs, recent files, statistics
+- Open the dashboard or the Options page
 
 ### Options Page
 
-Access via the gear icon in the popup, or from `chrome://extensions`.
+Open it from the gear icon in the popup or dashboard, or from `chrome://extensions`. Sections: General, Dashboard, Popup, Launcher, Services and Window.
 
 Each service has four toggles:
 
 | Toggle | Description |
 |---|---|
 | **Intercept** | Redirect through Account Chooser |
-| **Popup** | Open in a chromeless popup window |
-| **Menu** | Show as a quick-launch button in the extension popup |
+| **Window** | Open in a separate chromeless window |
 | **Skip** | Skip Account Chooser if the URL already specifies a user (`authuser=` or `/u/N/`) |
+| **Launcher** | Show as a quick-launch button in the launcher |
 
 Group header rows have matching column toggles that apply to all services in the group at once. Drag the grip handle on any row to reorder services or groups. Use **+ Add group** to create a new group, and the rename/delete buttons in each group header to manage them.
 
 ## Privacy
 
-This extension stores only your preferences locally using `chrome.storage.sync`. No data is collected, transmitted, or shared with any third party.
+Everything runs in your browser. The extension doesn't ask you to sign in and doesn't use Google APIs: account names, photos and unread counts are read from Google with your existing session, the same way Google's own pages do. Settings are stored with `chrome.storage.sync`; the account cache and statistics stay in local storage. Browser history and bookmarks are read only after you turn those sections on, and never leave your device. No data is collected, transmitted, or shared with any third party.
+
+### Permissions
+
+| Permission | Used for |
+|---|---|
+| `webNavigation`, `tabs` | Routing Google links through Account Chooser; listing open Google tabs |
+| `storage` | Settings, account cache, statistics |
+| `alarms` | Refreshing the unread badge |
+| `declarativeNetRequestWithHostAccess` | Removing the extension's Origin header from Google's account-list request, which Google otherwise rejects |
+| `sidePanel` | Showing the popup in Chrome's side panel |
+| `history`, `bookmarks`, `favicon` (optional) | Recent files and the bookmarks bar, requested only when you turn them on |
+| Host permissions (Google service domains) | Intercepting their links, reading the Gmail unread feed and the account list |
 
 ## License
 

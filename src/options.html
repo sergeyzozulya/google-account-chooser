@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="color-scheme" content="light dark">
-  <title>Google Account Chooser — Options</title>
+  <title>Google Account Chooser (and Dashboard) — Options</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -65,17 +65,39 @@
     }
 
     .page {
-      max-width: 780px;
+      max-width: 1200px; /* same as the dashboard and What's new */
       margin: 0 auto;
-      padding: 40px 24px 60px;
+      padding: 28px 24px 60px;
     }
 
+    /* Title stays at the top while scrolling; the services table header sticks below it */
+    :root { --sticky-header: 56px; }
+
     header {
+      position: sticky;
+      top: 0;
+      z-index: 5;
       display: flex;
       align-items: center;
       gap: 12px;
-      margin-bottom: 8px;
+      height: var(--sticky-header);
+      margin-bottom: 4px;
+      background: var(--bg-page);
     }
+
+    .header-link {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      color: var(--text-low);
+    }
+
+    .header-link:hover { background: var(--hover-btn); }
+    #whats-new-link { margin-left: auto; }
+    .header-link + .header-link { margin-left: -8px; } /* 4px apart instead of the header's 12px gap */
 
     header h1 {
       font-size: 22px;
@@ -95,11 +117,17 @@
       padding-top: 0;
     }
 
-    /* Card headers (General, Menu) */
+    /* Card headers (General, Popup) */
+    /* Section titles stick below the page title while their card scrolls, like the services header */
     .card-header {
+      position: sticky;
+      top: var(--sticky-header);
+      z-index: 3;
       padding: 12px 20px;
       border-bottom: 1px solid var(--border);
+      border-radius: 8px 8px 0 0;
       margin: 0 -20px 0;
+      background: var(--bg);
     }
 
     .card-header h2 {
@@ -161,11 +189,12 @@
       background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 8px;
+      margin-bottom: 24px;
     }
 
     thead th {
       position: sticky;
-      top: 0;
+      top: var(--sticky-header);
       z-index: 2;
       padding: 12px 0;
       font-size: 12px;
@@ -269,10 +298,11 @@
       line-height: 1;
     }
 
+    /* Below the column header: above it, the sticky page title would cover the tip */
     .info-icon::after {
       content: attr(data-tip);
       position: absolute;
-      bottom: calc(100% + 6px);
+      top: calc(100% + 6px);
       left: 50%;
       transform: translateX(-50%);
       background: var(--tooltip-bg);
@@ -432,7 +462,7 @@
     #add-group-btn:hover { text-decoration: underline; }
 
 
-    /* When intercept is off, dim service name column and hide Popup/Skip switches. */
+    /* When intercept is off, dim service name column and hide Window/Skip switches. */
     tr.disabled td:first-child {
       opacity: 0.4;
     }
@@ -482,13 +512,118 @@
     }
 
     .card .select-field:focus { border-color: var(--accent); }
+
+    .card-row[hidden] { display: none; }
+
+    .title-tokens { margin-top: 6px; line-height: 1.8; }
+    .title-tokens code {
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 11px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: var(--bg-page);
+      color: var(--text);
+    }
+
+    .text-field {
+      font-size: 13px;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 10px;
+      background: var(--bg);
+      outline: none;
+      width: 240px;
+      flex-shrink: 0;
+      margin-left: 24px;
+    }
+
+    .text-field:focus { border-color: var(--accent); }
+
+    .inline-switches { display: flex; gap: 20px; flex-shrink: 0; margin-left: 32px; }
+    .inline-switch { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+
+    /* Dashboard account and section rows (drag to reorder, like the services table) */
+    .settings-table { margin: 0 -20px; border-bottom: 1px solid var(--border); }
+    .settings-table + .card-row { padding-top: 16px; }
+    .card-row + .settings-table { margin-top: 16px; border-top: 1px solid var(--border); }
+    .card > .settings-table:last-child { margin-bottom: -16px; border-bottom: none; }
+
+    .table-group {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 37px;
+      padding: 4px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--bg-page);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .table-group:not(:first-child) { border-top: 1px solid var(--border); }
+    .card .table-group .select-field { padding-top: 3px; padding-bottom: 3px; font-weight: 400; }
+
+    .table-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border-sub);
+      transition: background 0.1s;
+    }
+
+    .sortable .table-row:last-child { border-bottom: none; }
+    .table-row:hover { background: var(--hover-row); }
+    .table-row .label { flex: 1; min-width: 0; }
+    .sortable .table-row:hover .drag-handle { opacity: 1; }
+    .sortable .dragging { opacity: 0.4; }
+    .sortable .drop-above { box-shadow: 0 -2px 0 var(--drop-line); }
+    .sortable .drop-below { box-shadow: 0 2px 0 var(--drop-line); }
+    .card .sortable .select-field { min-width: 130px; }
+
+    .account-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--drop-into);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      object-fit: cover;
+    }
+
+    .sortable .table-row:hover .group-actions,
+    .sortable .table-row:focus-within .group-actions { opacity: 1; }
+    .section-icon { display: flex; justify-content: center; width: 28px; flex-shrink: 0; color: var(--text-low); }
+    .account-name-input { font-size: 13px; font-weight: 500; width: 220px; }
+
+    .accounts-empty { font-size: 12px; color: var(--text-low); padding: 12px 20px; }
   </style>
 </head>
 <body>
   <div class="page">
     <header>
       <img src="icons/icon.png" width="32" height="32" alt="">
-      <h1>Google Account Chooser</h1>
+      <h1>Google Account Chooser (and Dashboard)</h1>
+      <a id="whats-new-link" class="header-link" href="whats-new.html" title="What's new">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><line x1="12" y1="17" x2="12" y2="17.01"/>
+        </svg>
+      </a>
+      <a id="dashboard-link" class="header-link" href="dashboard.html" title="Open dashboard">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/>
+          <rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>
+        </svg>
+      </a>
     </header>
     <p class="subtitle">Automatically routes Google service links through Account Chooser so you can pick the right Google account before the page loads — no more accidentally opening Gmail or Drive in the wrong account. <a href="https://itsua.com/gac/">About & Privacy</a></p>
 
@@ -497,7 +632,7 @@
       <div class="card-header"><h2>General</h2></div>
       <div class="card-row">
         <div>
-          <div class="label">Enable extension</div>
+          <div class="label">Intercept Google links</div>
           <div class="hint">Temporarily pause all interception without changing service settings.</div>
         </div>
         <label class="switch">
@@ -505,37 +640,123 @@
           <span class="slider"></span>
         </label>
       </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Dashboard in new tabs</div>
+          <div class="hint">Show the dashboard instead of Chrome's New Tab page.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="dashboard-new-tab">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">New tab title</div>
+          <div class="hint">The browser tab title of the dashboard when it opens as a new tab.</div>
+        </div>
+        <input class="text-field" id="new-tab-title" type="text" placeholder="New tab">
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Toolbar icon opens</div>
+          <div class="hint">Popup closes after you open something; the side panel stays open next to your tabs.</div>
+        </div>
+        <select class="select-field" id="action-opens">
+          <option value="popup">Popup</option>
+          <option value="sidepanel">Side panel</option>
+        </select>
+      </div>
     </div>
 
-    <!-- Menu -->
+    <!-- Dashboard -->
     <div class="card">
-      <div class="card-header"><h2>Menu</h2></div>
+      <div class="card-header"><h2>Dashboard</h2></div>
+      <!-- Laid out like the services table: grey group bands, drag-to-reorder rows -->
+      <div class="settings-table">
+        <div class="table-group">
+          <span>Accounts</span>
+          <select class="select-field" id="dashboard-columns" title="Accounts per row">
+            <option value="all">All in one row</option>
+            <option value="1">1 per row</option>
+            <option value="2">2 per row</option>
+            <option value="3">3 per row</option>
+            <option value="4">4 per row</option>
+          </select>
+        </div>
+        <div id="dashboard-accounts" class="sortable"></div>
+        <div class="table-group"><span>Sections</span></div>
+        <div id="dashboard-sections" class="sortable"></div>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Title</div>
+          <div class="hint">What the dashboard header shows.</div>
+        </div>
+        <select class="select-field" id="title-format"></select>
+      </div>
+      <div class="card-row" id="title-custom-row" hidden>
+        <div>
+          <div class="label" id="title-custom-label">Custom title format</div>
+          <div id="title-format-help">
+            <div class="hint">Preview: <b id="title-preview"></b></div>
+            <div class="hint title-tokens" id="title-tokens"></div>
+          </div>
+        </div>
+        <input class="text-field" id="title-custom" type="text" spellcheck="false" placeholder="dddd D MMMM · HH:mm">
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Search buttons</div>
+          <div class="hint">Which searches the dashboard offers. The first one shown is used when you press Enter; with none, the search bar is hidden.</div>
+        </div>
+        <div class="inline-switches">
+          <label class="inline-switch">Google <span class="switch"><input type="checkbox" data-search="google"><span class="slider"></span></span></label>
+          <label class="inline-switch">Gmail <span class="switch"><input type="checkbox" data-search="gmail"><span class="slider"></span></span></label>
+          <label class="inline-switch">Drive <span class="switch"><input type="checkbox" data-search="drive"><span class="slider"></span></span></label>
+        </div>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Recent files per account</div>
+          <div class="hint">How many recently opened Docs, Sheets, Slides and Forms to list for each account.</div>
+        </div>
+        <select class="select-field" id="recent-per-account">
+          <option value="3">3</option>
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Popup (the extension's toolbar popup) -->
+    <div class="card">
+      <div class="card-header"><h2>Popup</h2></div>
       <div class="card-row">
         <div>
           <div class="label">Show title</div>
-          <div class="hint">Show the "Google Account Chooser" heading at the top of the popup.</div>
+          <div class="hint">Show the dashboard title (Options → Dashboard → Title) at the top of the popup.</div>
         </div>
         <label class="switch">
           <input type="checkbox" id="show-popup-title">
           <span class="slider"></span>
         </label>
       </div>
-
-      <div class="card-row">
-        <div>
-          <div class="label">Show services</div>
-          <div class="hint">Show the quick-launch service buttons in the extension popup.</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="show-menu-services">
-          <span class="slider"></span>
-        </label>
+      <!-- What the toolbar popup shows; everything but the launcher comes from the dashboard -->
+      <div class="settings-table">
+        <div class="table-group"><span>Show in popup</span></div>
+        <div id="popup-sections" class="sortable"></div>
       </div>
+    </div>
 
+    <!-- Launcher -->
+    <div class="card">
+      <div class="card-header"><h2>Launcher</h2></div>
       <div class="card-row">
         <div>
           <div class="label">Show service groups</div>
-          <div class="hint">Show group separators (Workspace, Personal, etc.) between service icons in the popup.</div>
+          <div class="hint">Show group separators (Workspace, Personal, etc.) between service icons in the launcher.</div>
         </div>
         <label class="switch">
           <input type="checkbox" id="show-menu-groups">
@@ -557,7 +778,7 @@
       <div class="card-row">
         <div>
           <div class="label">Keyboard navigation</div>
-          <div class="hint">Use arrow keys to navigate between services in the popup.</div>
+          <div class="hint">Use arrow keys to navigate between services in the launcher.</div>
         </div>
         <label class="switch">
           <input type="checkbox" id="keyboard-nav" checked>
@@ -566,13 +787,32 @@
       </div>
     </div>
 
-    <!-- Popup -->
+    <!-- Per-service table -->
+    <div class="services-card">
+      <table>
+        <thead>
+          <tr>
+            <th>Services</th>
+            <th class="col-intercept">Intercept <i class="info-icon" data-tip="Redirect clicks through Account Chooser so you can pick the right Google account">i</i></th>
+            <th>Window <i class="info-icon" data-tip="Open the service in a separate chromeless window instead of the current tab">i</i></th>
+            <th>Skip <i class="info-icon" data-tip="Skip account chooser when the URL already specifies a user account (authuser= or /u/N/)">i</i></th>
+            <th class="col-menu"><span>Launcher</span> <i class="info-icon" data-tip="Show this service in the launcher (in the popup and in each dashboard account)">i</i></th>
+          </tr>
+        </thead>
+        <tbody id="service-list"></tbody>
+      </table>
+      <div class="add-group-row">
+        <button id="add-group-btn">+ Add group</button>
+      </div>
+    </div>
+
+    <!-- Window (services opened in separate windows) -->
     <div class="card">
-      <div class="card-header"><h2>Popup</h2></div>
+      <div class="card-header"><h2>Window</h2></div>
       <div class="card-row">
         <div>
-          <div class="label">Window placement</div>
-          <div class="hint">Center — popup appears centered on your screen. Tiles — each popup cascades offset from the previous one. Custom — remembers the position you last moved each service popup to.</div>
+          <div class="label">Placement</div>
+          <div class="hint">Center — the window appears centered on your screen. Tiles — each window cascades offset from the previous one. Custom — remembers the position you last moved each service window to.</div>
         </div>
         <select class="select-field" id="popup-placement">
           <option value="center">Center</option>
@@ -583,8 +823,8 @@
 
       <div class="card-row">
         <div>
-          <div class="label">Window size</div>
-          <div class="hint">Default — 1024×768. Large — 75% of the current window. Full screen — matches the current window size. Custom — starts at 1024×768 and remembers the size you resize each service popup to.</div>
+          <div class="label">Size</div>
+          <div class="hint">Default — 1024×768. Large — 75% of the current window. Full screen — matches the current window size. Custom — starts at 1024×768 and remembers the size you resize each service window to.</div>
         </div>
         <select class="select-field" id="popup-size">
           <option value="default">Default</option>
@@ -594,25 +834,6 @@
         </select>
       </div>
 
-    </div>
-
-    <!-- Per-service table -->
-    <div class="services-card">
-      <table>
-        <thead>
-          <tr>
-            <th>Services</th>
-            <th class="col-intercept">Intercept <i class="info-icon" data-tip="Redirect clicks through Account Chooser so you can pick the right Google account">i</i></th>
-            <th>Popup <i class="info-icon" data-tip="Open the service in a chromeless popup window instead of the current tab">i</i></th>
-            <th>Skip <i class="info-icon" data-tip="Skip account chooser when the URL already specifies a user account (authuser= or /u/N/)">i</i></th>
-            <th class="col-menu"><span>Menu</span> <i class="info-icon" data-tip="Add a quick-launch button for this service in the extension popup">i</i></th>
-          </tr>
-        </thead>
-        <tbody id="service-list"></tbody>
-      </table>
-      <div class="add-group-row">
-        <button id="add-group-btn">+ Add group</button>
-      </div>
     </div>
   </div>
 

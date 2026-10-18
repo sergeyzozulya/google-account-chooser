@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, SERVICE_GROUPS */
+/* global SERVICE_DEFS, SERVICE_GROUPS, DASHBOARD_SECTIONS, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate */
 
 // Build per-service defaults from shared definitions
 const DEFAULT_SERVICES = Object.fromEntries(
@@ -10,6 +10,9 @@ const DEFAULT_SERVICES = Object.fromEntries(
 // In-memory state (loaded from storage, then mutated on toggle)
 let state = {
   enabled: true,
+  dashboardNewTab: false,
+  newTabTitle: '',
+  actionOpens: 'popup',   // toolbar icon: 'popup' or 'sidepanel'
   popupPlacement: 'center',
   popupSize: 'custom',
   showPopupTitle: true,
@@ -17,6 +20,16 @@ let state = {
   showMenuServices: true,
   showMenuGroups: true,
   keyboardNav: true,
+  dashboardColumns: 'all',
+  recentPerAccount: 5,
+  dashboardTitleFormat: 'auto',
+  popupSections: { search: false, accounts: false, tabs: false, recent: false, stats: false },
+  popupOrder: [],        // launcher + dashboard section ids, in popup order
+  searchButtons: { google: true, gmail: true, drive: true },
+  dashboardSections: [], // [{ id, label, visible, width }] in display order
+  accounts: [],          // dashboard accounts ({ index, email?, name?, photo? }) in display order
+  accountOrder: [],      // accountKeys in display order
+  accountLabels: {},     // accountKey → nickname
   groups: [],     // array of { label, hosts[] }
   services: {},   // host → { intercept, popup, menu }
 };
@@ -45,6 +58,9 @@ function save() {
   }
   chrome.storage.sync.set({
     enabled: state.enabled,
+    dashboardNewTab: state.dashboardNewTab,
+    newTabTitle: state.newTabTitle,
+    actionOpens: state.actionOpens,
     popupPlacement: state.popupPlacement,
     popupSize: state.popupSize,
     showPopupTitle: state.showPopupTitle,
@@ -52,6 +68,15 @@ function save() {
     showMenuServices: state.showMenuServices,
     showMenuGroups: state.showMenuGroups,
     keyboardNav: state.keyboardNav,
+    dashboardColumns: state.dashboardColumns,
+    recentPerAccount: state.recentPerAccount,
+    dashboardTitleFormat: state.dashboardTitleFormat,
+    popupSections: state.popupSections,
+    popupOrder: state.popupOrder,
+    searchButtons: state.searchButtons,
+    dashboardSections: state.dashboardSections.map(({ id, visible, width, title }) => ({ id, visible, width, title })),
+    accountOrder: state.accountOrder,
+    accountLabels: state.accountLabels,
     groups: state.groups.map(g => ({ id: g.id, label: g.label, hosts: [...g.hosts] })),
     services: toSave,
   });
@@ -373,17 +398,298 @@ function onDrop(e) {
   syncAllSwitches();
 }
 
-function syncMenuServicesDependents() {
-  const enabled = state.showMenuServices;
-  document.getElementById('show-menu-titles').disabled = !enabled;
-  document.getElementById('show-menu-groups').disabled = !enabled;
+// What the toolbar popup shows, in order: the Launcher (its own service grid, stored as
+// showMenuServices) and dashboard sections
+function renderPopupSections() {
+  document.getElementById('popup-sections').innerHTML = state.popupOrder.map((id, i) => {
+    const launcher = id === 'launcher';
+    const label = launcher
+      ? 'Launcher<div class="hint">Service buttons that open through Account Chooser</div>'
+      : DASHBOARD_SECTIONS.find(d => d.id === id).label;
+    const on = launcher ? state.showMenuServices : state.popupSections[id];
+    return `
+      <div class="table-row" data-index="${i}" data-popup-section="${id}">
+        <span class="drag-handle" draggable="true">${SVG_GRIP}</span>
+        <span class="section-icon">${sectionIcon(id)}</span>
+        <div class="label">${label}</div>
+        <label class="switch"><input type="checkbox" ${on ? 'checked' : ''}><span class="slider"></span></label>
+      </div>`;
+  }).join('');
 }
 
+document.getElementById('popup-sections').addEventListener('change', (e) => {
+  const id = e.target.closest('[data-popup-section]')?.dataset.popupSection;
+  if (!id) return;
+  if (id === 'launcher') state.showMenuServices = e.target.checked;
+  else state.popupSections[id] = e.target.checked;
+  save();
+});
+
 // ── Events ─────────────────────────────────────────────────────────────────
+
+document.getElementById('dashboard-new-tab').addEventListener('change', (e) => {
+  state.dashboardNewTab = e.target.checked;
+  document.getElementById('new-tab-title').disabled = !state.dashboardNewTab;
+  save();
+});
+
+document.getElementById('action-opens').addEventListener('change', (e) => {
+  state.actionOpens = e.target.value;
+  save();
+});
+
+// Saved on Enter or leaving the field; empty means Chrome's own "New tab"
+document.getElementById('new-tab-title').addEventListener('change', (e) => {
+  state.newTabTitle = e.target.value.trim();
+  save();
+});
 
 document.getElementById('global-toggle').addEventListener('change', (e) => {
   state.enabled = e.target.checked;
   save();
+});
+
+document.querySelectorAll('[data-search]').forEach(input => input.addEventListener('change', () => {
+  state.searchButtons[input.dataset.search] = input.checked;
+  save();
+}));
+
+// Dashboard title: preset formats (shown as live examples), static text, or a custom format
+const titleSelect = document.getElementById('title-format');
+const titleInput = document.getElementById('title-custom');
+// 'preset', 'text' or 'custom'; custom stays selected even when its text matches a preset
+let titleMode = 'preset';
+
+const titleModeOf = (format) =>
+  format.startsWith('text:') ? 'text' : TITLE_FORMATS.includes(format) ? 'preset' : 'custom';
+const TITLE_TOKENS = ['dddd', 'ddd', 'D', 'DD', 'MMMM', 'MMM', 'M', 'MM', 'YYYY', 'YY', 'H', 'HH', 'h', 'hh', 'mm', 'ss', 'A'];
+
+function renderTitleFormat() {
+  const now = new Date();
+  titleSelect.innerHTML = TITLE_FORMATS.map(f => `<option value="${esc(f)}">${esc(formatDate(now, f))}</option>`).join('')
+    + '<option value="text">Text…</option><option value="custom">Custom format…</option>';
+  titleSelect.value = titleMode === 'preset' ? state.dashboardTitleFormat : titleMode;
+  document.getElementById('title-custom-row').hidden = titleMode === 'preset';
+  document.getElementById('title-custom-label').textContent = titleMode === 'text' ? 'Title text' : 'Custom title format';
+  document.getElementById('title-format-help').hidden = titleMode !== 'custom';
+  titleInput.placeholder = titleMode === 'text' ? 'Dashboard' : 'dddd D MMMM · HH:mm';
+  document.getElementById('title-tokens').innerHTML =
+    TITLE_TOKENS.map(t => `<code>${t}</code> ${esc(formatDate(now, t))}`).join(' · ')
+    + ' · <code>[text]</code> shown as is';
+  previewTitle();
+}
+
+function previewTitle() {
+  document.getElementById('title-preview').textContent = formatDate(new Date(), titleInput.value || 'auto');
+}
+
+titleSelect.addEventListener('change', () => {
+  const previous = titleMode;
+  titleMode = titleSelect.value === 'text' || titleSelect.value === 'custom' ? titleSelect.value : 'preset';
+  if (titleMode === 'text') {
+    if (previous !== 'text') titleInput.value = 'Dashboard';
+    state.dashboardTitleFormat = `text:${titleInput.value}`;
+  } else if (titleMode === 'custom') {
+    // Start from the current format so there's something to edit
+    if (previous !== 'custom') titleInput.value = previous === 'preset' && state.dashboardTitleFormat !== 'auto' ? state.dashboardTitleFormat : 'dddd D MMMM · HH:mm';
+    state.dashboardTitleFormat = titleInput.value;
+  } else {
+    state.dashboardTitleFormat = titleSelect.value;
+  }
+  save();
+  renderTitleFormat();
+  if (titleMode !== 'preset') titleInput.focus();
+});
+
+titleInput.addEventListener('input', previewTitle);
+// Saved on Enter or leaving the field, not per keystroke (sync storage limits writes per minute).
+// An empty field goes back to the default title.
+titleInput.addEventListener('change', () => {
+  const value = titleInput.value.trim();
+  if (!value) titleMode = 'preset';
+  state.dashboardTitleFormat = !value ? 'auto' : titleMode === 'text' ? `text:${value}` : value;
+  save();
+  renderTitleFormat();
+});
+
+document.getElementById('recent-per-account').addEventListener('change', (e) => {
+  state.recentPerAccount = Number(e.target.value);
+  save();
+});
+
+document.getElementById('dashboard-columns').addEventListener('change', (e) => {
+  state.dashboardColumns = e.target.value;
+  save();
+});
+
+const SECTION_WIDTHS = [['full', 'Full width'], ['two-thirds', 'Two thirds'], ['half', 'Half'], ['third', 'One third']];
+
+const esc = (s) => String(s).replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function renderDashboardSections() {
+  document.getElementById('dashboard-sections').innerHTML = state.dashboardSections.map((s, i) => `
+    <div class="table-row" data-index="${i}">
+      <span class="drag-handle" draggable="true">${SVG_GRIP}</span>
+      <span class="section-icon">${sectionIcon(s.id)}</span>
+      <div class="label">${s.label}</div>
+      ${s.id === 'search' ? '' : `
+        <label class="inline-switch" title="Show the section title">Title
+          <span class="switch"><input type="checkbox" data-field="title" ${s.title ? 'checked' : ''}><span class="slider"></span></span>
+        </label>`}
+      <select class="select-field" data-field="width">
+        ${SECTION_WIDTHS.map(([value, label]) => `<option value="${value}" ${s.width === value ? 'selected' : ''}>${label}</option>`).join('')}
+      </select>
+      <label class="switch">
+        <input type="checkbox" data-field="visible" ${s.visible ? 'checked' : ''}>
+        <span class="slider"></span>
+      </label>
+    </div>`).join('');
+}
+
+function renderDashboardAccounts() {
+  const el = document.getElementById('dashboard-accounts');
+  if (state.accounts.length === 0) {
+    el.innerHTML = '<div class="accounts-empty">No accounts detected yet — open the dashboard first.</div>';
+    return;
+  }
+  el.innerHTML = state.accounts.map((a, i) => {
+    const nickname = state.accountLabels[accountKey(a)] || '';
+    const name = nickname || a.email || `Account ${a.index}`;
+    const secondary = nickname ? a.email : a.name;
+    const avatar = a.photo
+      ? `<img class="account-avatar" src="${esc(a.photo)}" alt="">`
+      : `<div class="account-avatar">${esc(name.charAt(0).toUpperCase())}</div>`;
+    return `
+      <div class="table-row" data-index="${i}">
+        <span class="drag-handle" draggable="true">${SVG_GRIP}</span>
+        ${avatar}
+        <div class="label">
+          <div class="group-header-inner">
+            <span class="account-name">${esc(name)}</span>
+            <input class="group-label-input account-name-input" type="text" value="${esc(nickname)}"
+                   placeholder="${esc(a.email || '')}" style="display:none">
+            <div class="group-actions">
+              <button class="group-action-btn edit-btn" title="Rename account">${SVG_EDIT}</button>
+              <button class="group-action-btn save-btn" title="Save name" style="display:none">${SVG_CHECK}</button>
+            </div>
+          </div>
+          ${secondary ? `<div class="hint">${esc(secondary)}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// Inline rename, same interaction as group names in the services table.
+// An empty name (or the email itself) clears the nickname.
+function editAccountName(row) {
+  row.querySelector('.account-name').style.display = 'none';
+  row.querySelector('.edit-btn').style.display = 'none';
+  row.querySelector('.save-btn').style.display = '';
+  const input = row.querySelector('.account-name-input');
+  input.style.display = '';
+  input.focus();
+  input.select();
+}
+
+function saveAccountName(row) {
+  const a = state.accounts[Number(row.dataset.index)];
+  const key = accountKey(a);
+  const value = row.querySelector('.account-name-input').value.trim();
+  if (value !== (state.accountLabels[key] || '')) {
+    if (value && value !== a.email) state.accountLabels[key] = value;
+    else delete state.accountLabels[key];
+    save();
+  }
+  renderDashboardAccounts();
+}
+
+// Drag-to-reorder for a list of .card-row[data-index] rows; onMove(from, to) updates the data
+function makeSortable(container, onMove) {
+  let from = null;
+  const clear = () => container.querySelectorAll('.drop-above, .drop-below')
+    .forEach(el => el.classList.remove('drop-above', 'drop-below'));
+  const target = (e) => {
+    const row = e.target.closest('[data-index]');
+    if (!row || from === null) return null;
+    const r = row.getBoundingClientRect();
+    return { row, index: Number(row.dataset.index), above: e.clientY < r.top + r.height / 2 };
+  };
+
+  container.addEventListener('dragstart', (e) => {
+    const row = e.target.closest('.drag-handle')?.closest('[data-index]');
+    if (!row) return;
+    from = Number(row.dataset.index);
+    e.dataTransfer.effectAllowed = 'move';
+    const r = row.getBoundingClientRect();
+    e.dataTransfer.setDragImage(row, e.clientX - r.left, e.clientY - r.top);
+    setTimeout(() => row.classList.add('dragging'), 0);
+  });
+  container.addEventListener('dragover', (e) => {
+    if (from === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    clear();
+    const t = target(e);
+    if (t && t.index !== from) t.row.classList.add(t.above ? 'drop-above' : 'drop-below');
+  });
+  container.addEventListener('drop', (e) => {
+    const t = target(e);
+    if (!t) return;
+    e.preventDefault();
+    let to = t.index + (t.above ? 0 : 1);
+    if (from < to) to--;
+    if (to !== from) onMove(from, to);
+  });
+  container.addEventListener('dragend', () => {
+    clear();
+    container.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+    from = null;
+  });
+  container.addEventListener('dragleave', (e) => {
+    if (!container.contains(e.relatedTarget)) clear();
+  });
+}
+
+const move = (list, from, to) => list.splice(to, 0, list.splice(from, 1)[0]);
+
+makeSortable(document.getElementById('dashboard-sections'), (from, to) => {
+  move(state.dashboardSections, from, to);
+  renderDashboardSections();
+  save();
+});
+
+makeSortable(document.getElementById('popup-sections'), (from, to) => {
+  move(state.popupOrder, from, to);
+  renderPopupSections();
+  save();
+});
+
+makeSortable(document.getElementById('dashboard-accounts'), (from, to) => {
+  move(state.accounts, from, to);
+  state.accountOrder = state.accounts.map(accountKey);
+  renderDashboardAccounts();
+  save();
+});
+
+document.getElementById('dashboard-sections').addEventListener('change', (e) => {
+  const section = state.dashboardSections[Number(e.target.closest('[data-index]').dataset.index)];
+  if (e.target.dataset.field === 'width') section.width = e.target.value;
+  if (e.target.dataset.field === 'visible') section.visible = e.target.checked;
+  if (e.target.dataset.field === 'title') section.title = e.target.checked;
+  save();
+});
+
+document.getElementById('dashboard-accounts').addEventListener('click', (e) => {
+  const row = e.target.closest('[data-index]');
+  if (e.target.closest('.edit-btn')) editAccountName(row);
+  if (e.target.closest('.save-btn')) saveAccountName(row);
+});
+
+document.getElementById('dashboard-accounts').addEventListener('keydown', (e) => {
+  if (!e.target.classList.contains('account-name-input')) return;
+  if (e.key === 'Enter') saveAccountName(e.target.closest('[data-index]'));
+  if (e.key === 'Escape') renderDashboardAccounts();
 });
 
 document.getElementById('popup-placement').addEventListener('change', (e) => {
@@ -403,12 +709,6 @@ document.getElementById('show-popup-title').addEventListener('change', (e) => {
 
 document.getElementById('show-menu-titles').addEventListener('change', (e) => {
   state.showMenuTitles = e.target.checked;
-  save();
-});
-
-document.getElementById('show-menu-services').addEventListener('change', (e) => {
-  state.showMenuServices = e.target.checked;
-  syncMenuServicesDependents();
   save();
 });
 
@@ -469,9 +769,12 @@ document.getElementById('service-list').addEventListener('change', (e) => {
 // ── Init ───────────────────────────────────────────────────────────────────
 
 chrome.storage.sync.get(
-  { enabled: true, popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, showMenuTitles: true, showMenuServices: true, showMenuGroups: true, keyboardNav: true, groups: null, services: {} },
+  { enabled: true, dashboardNewTab: false, newTabTitle: '', actionOpens: 'popup', popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, showMenuTitles: true, showMenuServices: true, showMenuGroups: true, keyboardNav: true, dashboardColumns: 'all', recentPerAccount: 5, dashboardTitleFormat: 'auto', popupSections: {}, popupOrder: null, searchButtons: {}, dashboardSections: null, accountOrder: [], accountLabels: {}, manualAccountCount: 1, groups: null, services: {} },
   (data) => {
     state.enabled = data.enabled;
+    state.dashboardNewTab = data.dashboardNewTab;
+    state.newTabTitle = data.newTabTitle;
+    state.actionOpens = data.actionOpens;
     state.popupPlacement = data.popupPlacement;
     state.popupSize = data.popupSize;
     state.showPopupTitle = data.showPopupTitle;
@@ -479,6 +782,15 @@ chrome.storage.sync.get(
     state.showMenuServices = data.showMenuServices;
     state.showMenuGroups = data.showMenuGroups;
     state.keyboardNav = data.keyboardNav;
+    state.dashboardColumns = data.dashboardColumns;
+    state.recentPerAccount = data.recentPerAccount;
+    state.dashboardTitleFormat = data.dashboardTitleFormat;
+    state.popupSections = { ...state.popupSections, ...data.popupSections };
+    state.popupOrder = popupOrder(data.popupOrder);
+    state.searchButtons = { ...state.searchButtons, ...data.searchButtons };
+    state.dashboardSections = dashboardSections(data.dashboardSections);
+    state.accountLabels = data.accountLabels;
+    state.accountOrder = data.accountOrder;
     state.groups = data.groups
       ? reconcileGroups(data.groups.map(g => ({ id: g.id || newGroupId(), label: g.label, hosts: [...g.hosts] })))
       : SERVICE_GROUPS.map(g => ({ id: g.id, label: g.label, hosts: [...g.hosts] }));
@@ -496,15 +808,33 @@ chrome.storage.sync.get(
     }
 
     document.getElementById('global-toggle').checked = state.enabled;
+    document.getElementById('dashboard-new-tab').checked = state.dashboardNewTab;
+    document.getElementById('new-tab-title').value = state.newTabTitle;
+    document.getElementById('action-opens').value = state.actionOpens;
+    document.getElementById('new-tab-title').disabled = !state.dashboardNewTab;
     document.getElementById('popup-placement').value = state.popupPlacement;
     document.getElementById('popup-size').value = state.popupSize;
     document.getElementById('show-popup-title').checked = state.showPopupTitle;
     document.getElementById('show-menu-titles').checked = state.showMenuTitles;
-    document.getElementById('show-menu-services').checked = state.showMenuServices;
     document.getElementById('show-menu-groups').checked = state.showMenuGroups;
     document.getElementById('keyboard-nav').checked = state.keyboardNav;
+    document.getElementById('dashboard-columns').value = state.dashboardColumns;
+    document.getElementById('recent-per-account').value = state.recentPerAccount;
+    titleMode = titleModeOf(state.dashboardTitleFormat);
+    if (titleMode !== 'preset') titleInput.value = state.dashboardTitleFormat.replace(/^text:/, '');
+    renderTitleFormat();
+    document.querySelectorAll('[data-search]').forEach(input => { input.checked = state.searchButtons[input.dataset.search]; });
+    renderDashboardSections();
+    renderPopupSections();
 
-    syncMenuServicesDependents();
+    // Accounts as last detected by the dashboard, or the manual count when detection failed
+    chrome.storage.local.get('accountsCache', ({ accountsCache }) => {
+      const detected = accountsCache?.accounts || [];
+      const list = detected.length ? detected : Array.from({ length: data.manualAccountCount }, (_, index) => ({ index }));
+      state.accounts = orderAccounts(list, data.accountOrder);
+      renderDashboardAccounts();
+    });
+
     render();
     syncAllSwitches();
   }
