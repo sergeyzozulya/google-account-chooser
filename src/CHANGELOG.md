@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.0.1] — 2026-10-20
+
+### Added
+- **Open links** (Options → Dashboard): dashboard links (services, recent files, bookmarks, searches) open in a new tab (default), the current tab, or a new tab only when the dashboard tab is pinned; Ctrl/⌘-click always opens a new tab, and the popup always opens one
+
+### Changed
+- Dashboard bookmarks follow **Open links** instead of always opening in the same tab
+
+---
+
 ## [2.0.0] — 2026-10-18
 
 ### Added

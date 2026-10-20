@@ -26,6 +26,7 @@ let manualCount = 1;
 let columns = 'all';     // accounts per row: 'all' or a number as a string
 let recentPerAccount = 5;
 let titleFormat = 'auto';  // see formatDate in services-data.js
+let openLinks = 'new';   // where links open: 'new' tab, 'current' tab, or 'pinned' (new tab only from a pinned dashboard)
 let sections = [];       // [{ id, label, visible, width, title }] in display order
 let launcherFrame = null;
 let searchButtons = { google: true, gmail: true, drive: true };
@@ -68,12 +69,21 @@ const accountIcon = (key) => avatarHtml(findAccount(key)?.photo, accountLabel(ke
 
 // Open a dashboard link. When the URL names the account, the background opens it without
 // Account Chooser; otherwise (e.g. a recent file with no account in its URL) it's intercepted as usual.
-function launch(url, service) {
+// With tabId, the link replaces the dashboard in that tab.
+function launch(url, service, tabId) {
   // Not a Google service (e.g. a bookmark), or no account in the URL: open normally
   const opened = !service || accountFromUrl(url) === null
-    ? chrome.tabs.create({ url })
-    : chrome.runtime.sendMessage({ type: 'open', url, service });
+    ? (tabId ? chrome.tabs.update(tabId, { url }) : chrome.tabs.create({ url }))
+    : chrome.runtime.sendMessage({ type: 'open', url, service, tabId });
   opened.then(closePopup);
+}
+
+// The dashboard's tab id when a link should open in place (Options → Dashboard → Open links).
+// Ctrl/⌘-click always opens a new tab, and so does the popup.
+async function inPlaceTabId(newTab) {
+  if (embedded || newTab || openLinks === 'new') return undefined;
+  const tab = await chrome.tabs.getCurrent();
+  return openLinks === 'pinned' && tab.pinned ? undefined : tab.id;
 }
 
 // ── Popup mode ─────────────────────────────────────────────────────────────
@@ -406,7 +416,7 @@ window.addEventListener('message', (e) => {
   if (msg.type === 'close') closeLauncher();
   if (msg.type === 'launch') {
     closeLauncher();
-    launch(msg.url, msg.service);
+    inPlaceTabId(msg.newTab).then(tabId => launch(msg.url, msg.service, tabId));
   }
 });
 
@@ -638,18 +648,10 @@ function closeBookmarkMenus(level = 0) {
   }
 }
 
-// A plain click opens the bookmark in this tab, like Chrome's bookmarks bar;
 // Ctrl/⌘ or the middle button open a new tab
 async function openBookmark(node, e) {
   closeBookmarkMenus();
-  const service = serviceForUrl(node.url);
-  if (!e.ctrlKey && !e.metaKey && e.button !== 1) {
-    const { id } = await chrome.tabs.getCurrent();
-    if (service && accountFromUrl(node.url) !== null) chrome.runtime.sendMessage({ type: 'open', url: node.url, service, tabId: id });
-    else chrome.tabs.update(id, { url: node.url });
-  } else {
-    launch(node.url, service);
-  }
+  launch(node.url, serviceForUrl(node.url), await inPlaceTabId(e.ctrlKey || e.metaKey || e.button === 1));
 }
 
 function onBookmarkClick(e) {
@@ -731,9 +733,10 @@ async function init() {
   addSectionIcons();
   const data = await chrome.storage.sync.get({
     accountLabels: {}, accountOrder: [], manualAccountCount: 1, dashboardColumns: 'all', dashboardSections: null, recentPerAccount: 5,
-    searchButtons: searchButtons, dashboardTitleFormat: 'auto', newTabTitle: '',
+    searchButtons: searchButtons, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', newTabTitle: '',
   });
   titleFormat = data.dashboardTitleFormat;
+  openLinks = data.dashboardOpenLinks;
   if (isNewTab) document.title = data.newTabTitle || NEW_TAB_TITLE;
   renderClock();
   accountLabels = data.accountLabels;
@@ -776,7 +779,7 @@ document.addEventListener('click', async (e) => {
   closeLauncher();
 
   const link = e.target.closest('[data-url]');
-  if (link) { launch(link.dataset.url, link.dataset.service); return; }
+  if (link) { launch(link.dataset.url, link.dataset.service, await inPlaceTabId(e.ctrlKey || e.metaKey)); return; }
 
   const tab = e.target.closest('[data-tab]');
   if (tab) {
@@ -815,15 +818,13 @@ document.getElementById('stats-reset').addEventListener('click', () => {
 document.getElementById('account-add').addEventListener('click', () => setManualCount(accounts.length + 1));
 document.getElementById('account-remove').addEventListener('click', () => setManualCount(Math.max(1, accounts.length - 1)));
 
-document.getElementById('search').addEventListener('submit', (e) => {
+document.getElementById('search').addEventListener('submit', async (e) => {
   e.preventDefault();
   const q = document.getElementById('q').value.trim();
   const target = SEARCH_TARGETS[e.submitter?.value];
   if (!q || !target) return;
   const url = target.url(encodeURIComponent(q), searchAccount[e.submitter.value] ?? 0);
-  // Google search isn't an intercepted service, so it opens directly and isn't counted
-  if (target.service) launch(url, target.service);
-  else chrome.tabs.create({ url }).then(closePopup);
+  launch(url, target.service, await inPlaceTabId());
 });
 
 chrome.tabs.onCreated.addListener(scheduleRenderTabs);
@@ -836,6 +837,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.stats) renderStats();
   if (area !== 'sync') return;
   if (changes.newTabTitle && isNewTab) document.title = changes.newTabTitle.newValue || NEW_TAB_TITLE;
+  if (changes.dashboardOpenLinks) openLinks = changes.dashboardOpenLinks.newValue;
   if (changes.dashboardTitleFormat) {
     titleFormat = changes.dashboardTitleFormat.newValue;
     renderClock();

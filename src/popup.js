@@ -121,9 +121,9 @@ function renderMenu(groups, showTitles, showGroups, keyboardNav) {
   }
 
   menuEl.querySelectorAll('button[data-url]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
       if (account === null) chrome.tabs.create({ url: btn.dataset.url });
-      else toDashboard({ type: 'launch', url: btn.dataset.url, service: btn.dataset.host });
+      else toDashboard({ type: 'launch', url: btn.dataset.url, service: btn.dataset.host, newTab: e.ctrlKey || e.metaKey });
     });
   });
 

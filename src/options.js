@@ -23,6 +23,7 @@ let state = {
   dashboardColumns: 'all',
   recentPerAccount: 5,
   dashboardTitleFormat: 'auto',
+  dashboardOpenLinks: 'new', // 'new', 'current' or 'pinned' (new tab only from a pinned dashboard)
   popupSections: { search: false, accounts: false, tabs: false, recent: false, stats: false },
   popupOrder: [],        // launcher + dashboard section ids, in popup order
   searchButtons: { google: true, gmail: true, drive: true },
@@ -71,6 +72,7 @@ function save() {
     dashboardColumns: state.dashboardColumns,
     recentPerAccount: state.recentPerAccount,
     dashboardTitleFormat: state.dashboardTitleFormat,
+    dashboardOpenLinks: state.dashboardOpenLinks,
     popupSections: state.popupSections,
     popupOrder: state.popupOrder,
     searchButtons: state.searchButtons,
@@ -517,6 +519,11 @@ document.getElementById('recent-per-account').addEventListener('change', (e) => 
   save();
 });
 
+document.getElementById('dashboard-open-links').addEventListener('change', (e) => {
+  state.dashboardOpenLinks = e.target.value;
+  save();
+});
+
 document.getElementById('dashboard-columns').addEventListener('change', (e) => {
   state.dashboardColumns = e.target.value;
   save();
@@ -769,7 +776,7 @@ document.getElementById('service-list').addEventListener('change', (e) => {
 // ── Init ───────────────────────────────────────────────────────────────────
 
 chrome.storage.sync.get(
-  { enabled: true, dashboardNewTab: false, newTabTitle: '', actionOpens: 'popup', popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, showMenuTitles: true, showMenuServices: true, showMenuGroups: true, keyboardNav: true, dashboardColumns: 'all', recentPerAccount: 5, dashboardTitleFormat: 'auto', popupSections: {}, popupOrder: null, searchButtons: {}, dashboardSections: null, accountOrder: [], accountLabels: {}, manualAccountCount: 1, groups: null, services: {} },
+  { enabled: true, dashboardNewTab: false, newTabTitle: '', actionOpens: 'popup', popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, showMenuTitles: true, showMenuServices: true, showMenuGroups: true, keyboardNav: true, dashboardColumns: 'all', recentPerAccount: 5, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', popupSections: {}, popupOrder: null, searchButtons: {}, dashboardSections: null, accountOrder: [], accountLabels: {}, manualAccountCount: 1, groups: null, services: {} },
   (data) => {
     state.enabled = data.enabled;
     state.dashboardNewTab = data.dashboardNewTab;
@@ -785,6 +792,7 @@ chrome.storage.sync.get(
     state.dashboardColumns = data.dashboardColumns;
     state.recentPerAccount = data.recentPerAccount;
     state.dashboardTitleFormat = data.dashboardTitleFormat;
+    state.dashboardOpenLinks = data.dashboardOpenLinks;
     state.popupSections = { ...state.popupSections, ...data.popupSections };
     state.popupOrder = popupOrder(data.popupOrder);
     state.searchButtons = { ...state.searchButtons, ...data.searchButtons };
@@ -820,6 +828,7 @@ chrome.storage.sync.get(
     document.getElementById('keyboard-nav').checked = state.keyboardNav;
     document.getElementById('dashboard-columns').value = state.dashboardColumns;
     document.getElementById('recent-per-account').value = state.recentPerAccount;
+    document.getElementById('dashboard-open-links').value = state.dashboardOpenLinks;
     titleMode = titleModeOf(state.dashboardTitleFormat);
     if (titleMode !== 'preset') titleInput.value = state.dashboardTitleFormat.replace(/^text:/, '');
     renderTitleFormat();
