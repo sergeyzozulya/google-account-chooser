@@ -540,7 +540,7 @@ function renderDashboardSections() {
       <span class="drag-handle" draggable="true">${SVG_GRIP}</span>
       <span class="section-icon">${sectionIcon(s.id)}</span>
       <div class="label">${s.label}</div>
-      ${s.id === 'search' ? '' : `
+      ${s.id === 'search' || s.id === 'accounts' ? '' : `
         <label class="inline-switch" title="Show the section title">Title
           <span class="switch"><input type="checkbox" data-field="title" ${s.title ? 'checked' : ''}><span class="slider"></span></span>
         </label>`}

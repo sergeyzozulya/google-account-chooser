@@ -122,7 +122,8 @@ function renderMenu(groups, showTitles, showGroups, keyboardNav) {
 
   menuEl.querySelectorAll('button[data-url]').forEach(btn => {
     btn.addEventListener('click', (e) => {
-      if (account === null) chrome.tabs.create({ url: btn.dataset.url });
+      // window.open, unlike chrome.tabs.create, lets Chrome open the link in an installed web app
+      if (account === null) window.open(btn.dataset.url, '_blank', 'noopener');
       else toDashboard({ type: 'launch', url: btn.dataset.url, service: btn.dataset.host, newTab: e.ctrlKey || e.metaKey });
     });
   });

@@ -67,15 +67,34 @@ function avatarHtml(photo, name, cls = 'avatar') {
 
 const accountIcon = (key) => avatarHtml(findAccount(key)?.photo, accountLabel(key), 'avatar sm');
 
-// Open a dashboard link. When the URL names the account, the background opens it without
+// Open a dashboard link. When the URL names the account, the background lets it through without
 // Account Chooser; otherwise (e.g. a recent file with no account in its URL) it's intercepted as usual.
-// With tabId, the link replaces the dashboard in that tab.
-function launch(url, service, tabId) {
-  // Not a Google service (e.g. a bookmark), or no account in the URL: open normally
-  const opened = !service || accountFromUrl(url) === null
-    ? (tabId ? chrome.tabs.update(tabId, { url }) : chrome.tabs.create({ url }))
-    : chrome.runtime.sendMessage({ type: 'open', url, service, tabId });
-  opened.then(closePopup);
+// With tabId, the link replaces the dashboard in that tab. New tabs open with window.open, not
+// chrome.tabs.create, so Chrome can open the link in an installed web app (e.g. Gmail);
+// noopener keeps it capturable, since Chrome doesn't capture windows that have an opener.
+async function launch(url, service, tabId) {
+  const withAccount = service && accountFromUrl(url) !== null;
+  if (withAccount) await chrome.runtime.sendMessage({ type: 'open', url, service, tabId });
+  if (!tabId) window.open(url, '_blank', 'noopener');
+  else if (!withAccount) await chrome.tabs.update(tabId, { url });
+  closePopup();
+}
+
+// A service's start page for an account switches to a tab or web app window already open on that
+// service and account, if any; otherwise the link opens per Options → Dashboard → Open links.
+// newTab (Ctrl/⌘-click) always opens a new one.
+async function openLink(url, service, newTab = false) {
+  const account = accountFromUrl(url);
+  if (!newTab && service && account !== null && url === accountServiceUrl(service, account)) {
+    const tab = (await chrome.tabs.query({})).find(t => t.url && serviceForUrl(t.url) === service && accountFromUrl(t.url) === account);
+    if (tab) {
+      chrome.tabs.update(tab.id, { active: true });
+      chrome.windows.update(tab.windowId, { focused: true });
+      closePopup();
+      return;
+    }
+  }
+  launch(url, service, await inPlaceTabId(newTab));
 }
 
 // The dashboard's tab id when a link should open in place (Options → Dashboard → Open links).
@@ -134,7 +153,8 @@ function applyLayout() {
     // Search has nothing to offer with every search button turned off
     el.hidden = !s.visible || (s.id === 'search' && !Object.values(searchButtons).some(Boolean));
     el.style.gridColumn = `span ${SECTION_SPANS[s.width]}`;
-    el.classList.toggle('no-title', !s.title);
+    // Accounts has no title, only the detection hint and stepper
+    el.classList.toggle('no-title', !s.title && s.id !== 'accounts');
     container.append(el);
   }
 }
@@ -260,11 +280,11 @@ function renderAccounts() {
       </section>`;
   }).join('');
 
-  document.getElementById('accounts-hint').textContent =
-    detected  ? 'Signed-in accounts detected from your Google session.' :
-    detecting ? 'Detecting signed-in accounts…' :
-                'Couldn\'t detect signed-in accounts — set how many you use.';
-  document.getElementById('account-stepper').hidden = detected || detecting;
+  document.getElementById('accounts-head').hidden = detected;
+  document.getElementById('accounts-hint').textContent = detecting
+    ? 'Detecting signed-in accounts…'
+    : 'Couldn\'t detect signed-in accounts — set how many you use.';
+  document.getElementById('account-stepper').hidden = detecting;
 
   renderSearch();
   renderUnread();
@@ -416,7 +436,7 @@ window.addEventListener('message', (e) => {
   if (msg.type === 'close') closeLauncher();
   if (msg.type === 'launch') {
     closeLauncher();
-    inPlaceTabId(msg.newTab).then(tabId => launch(msg.url, msg.service, tabId));
+    openLink(msg.url, msg.service, msg.newTab);
   }
 });
 
@@ -649,9 +669,9 @@ function closeBookmarkMenus(level = 0) {
 }
 
 // Ctrl/⌘ or the middle button open a new tab
-async function openBookmark(node, e) {
+function openBookmark(node, e) {
   closeBookmarkMenus();
-  launch(node.url, serviceForUrl(node.url), await inPlaceTabId(e.ctrlKey || e.metaKey || e.button === 1));
+  openLink(node.url, serviceForUrl(node.url), e.ctrlKey || e.metaKey || e.button === 1);
 }
 
 function onBookmarkClick(e) {
@@ -779,7 +799,7 @@ document.addEventListener('click', async (e) => {
   closeLauncher();
 
   const link = e.target.closest('[data-url]');
-  if (link) { launch(link.dataset.url, link.dataset.service, await inPlaceTabId(e.ctrlKey || e.metaKey)); return; }
+  if (link) { openLink(link.dataset.url, link.dataset.service, e.ctrlKey || e.metaKey); return; }
 
   const tab = e.target.closest('[data-tab]');
   if (tab) {
@@ -818,13 +838,13 @@ document.getElementById('stats-reset').addEventListener('click', () => {
 document.getElementById('account-add').addEventListener('click', () => setManualCount(accounts.length + 1));
 document.getElementById('account-remove').addEventListener('click', () => setManualCount(Math.max(1, accounts.length - 1)));
 
-document.getElementById('search').addEventListener('submit', async (e) => {
+document.getElementById('search').addEventListener('submit', (e) => {
   e.preventDefault();
   const q = document.getElementById('q').value.trim();
   const target = SEARCH_TARGETS[e.submitter?.value];
   if (!q || !target) return;
   const url = target.url(encodeURIComponent(q), searchAccount[e.submitter.value] ?? 0);
-  launch(url, target.service, await inPlaceTabId());
+  openLink(url, target.service);
 });
 
 chrome.tabs.onCreated.addListener(scheduleRenderTabs);

@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.2] — 2026-10-20
+
+### Changed
+- Dashboard and popup links that open a new tab now open in the service's installed web app (e.g. Gmail) when there is one
+- A service opened from an account's launcher, or that account's Gmail unread badge, switches to a tab or web app window already open on that service and account instead of opening another; Ctrl/⌘-click still opens a new one
+- The Accounts section has no title (and no Title switch in Options → Dashboard → Sections); its hint and account count stepper show only while detecting or when detection fails
+
+---
+
 ## [2.0.1] — 2026-10-20
 
 ### Added

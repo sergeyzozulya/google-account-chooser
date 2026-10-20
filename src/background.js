@@ -32,12 +32,19 @@ const popupWindows = new Map();
 const TRUSTED_TAB_MS = 15000;
 const trustedTabs = new Map();
 
-// Open the tab blank first so it's marked trusted before its first real navigation starts.
-// With tabId, navigate that tab instead (the new-tab dashboard opening a bookmark in place).
-async function openWithAccount(url, tabId) {
-  const id = tabId ?? (await chrome.tabs.create({ url: 'about:blank' })).id;
-  trustedTabs.set(id, Date.now() + TRUSTED_TAB_MS);
-  chrome.tabs.update(id, { url });
+// URLs the dashboard is about to open in a new tab itself: url → expiry time. It uses window.open
+// so Chrome can open the link in an installed web app (chrome.tabs.create bypasses that), which
+// leaves no tab id to trust up front; the tab or app window the URL first lands in becomes trusted.
+const trustedUrls = new Map();
+
+// With tabId, navigate that tab (the dashboard opening a link in place)
+function openWithAccount(url, tabId) {
+  if (tabId) {
+    trustedTabs.set(tabId, Date.now() + TRUSTED_TAB_MS);
+    chrome.tabs.update(tabId, { url });
+  } else {
+    trustedUrls.set(new URL(url).href, Date.now() + TRUSTED_TAB_MS);
+  }
 }
 
 // Toolbar icon (Options → General): the popup, or the same page in Chrome's side panel.
@@ -284,6 +291,8 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (!service || !service.intercept) return;
 
   // Opened from the dashboard with a known account → let it through
+  if (trustedUrls.get(url) > Date.now()) trustedTabs.set(tabId, Date.now() + TRUSTED_TAB_MS);
+  trustedUrls.delete(url);
   if (trustedTabs.has(tabId)) {
     if (trustedTabs.get(tabId) > Date.now()) return;
     trustedTabs.delete(tabId);
