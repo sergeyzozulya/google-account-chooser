@@ -14,7 +14,7 @@ const sidePanel = new URLSearchParams(location.search).has('sidepanel');
 if (sidePanel) document.body.classList.add('side-panel');
 
 chrome.storage.sync.get(
-  { showPopupTitle: true, showMenuTitles: true, showMenuServices: true, showMenuGroups: true, showMenuOptions: true, keyboardNav: true, popupSections: {}, popupOrder: null, dashboardTitleFormat: 'auto', groups: null, services: {} },
+  { showPopupTitle: true, popupWidth: 'auto', showMenuTitles: true, showMenuServices: true, showMenuGroups: true, showMenuOptions: true, keyboardNav: true, popupSections: {}, popupOrder: null, dashboardTitleFormat: 'auto', groups: null, services: {} },
   (data) => {
     const activeGroups = data.groups || SERVICE_GROUPS;
 
@@ -45,6 +45,9 @@ chrome.storage.sync.get(
       window.close();
       return;
     }
+
+    // Options → Popup → Width; the side panel and the dashboard's launcher size to their frame
+    if (data.popupWidth !== 'auto' && account === null && !sidePanel) document.body.style.width = `${data.popupWidth}px`;
 
     // Show/hide sections
     document.querySelector('header').style.display = showTitle ? '' : 'none';

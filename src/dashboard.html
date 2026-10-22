@@ -362,6 +362,10 @@
     .unread.empty-inbox img { filter: grayscale(1); opacity: .45; }
     .unread.empty-inbox b { display: none; }
 
+    /* Signed out of Gmail: grey icon with an amber "!" */
+    .unread.signed-out img { filter: grayscale(1); opacity: .45; }
+    .unread.signed-out b { display: block; background: #f29900; }
+
     /* Same look as the toolbar icon badge (chrome.action badge in background.js) */
     .unread b {
       position: absolute;
@@ -389,6 +393,141 @@
       background: var(--bg);
       box-shadow: 0 4px 20px rgba(0, 0, 0, .18);
     }
+
+    /* Unread mail from an account's badge, in the launcher's place; rows like the Gmail app's */
+    .launcher.inbox { height: auto; max-height: 420px; overflow-y: auto; white-space: normal; }
+    .launcher.inbox.inline:not(.previewing) { max-height: 360px; }
+
+    /* Listed right away in the account card (Options → Gmail → Expand unread emails) */
+    .inbox.in-card { max-height: 360px; overflow-y: auto; border-top: 1px solid var(--border-sub); }
+    .no-list-header .in-card .inbox-head { display: none; }
+
+    /* The list header stays put while the list scrolls */
+    .inbox-view > .inbox-head { position: sticky; top: 0; z-index: 1; background: var(--bg); }
+
+    /* A message preview: wider and taller when floating, taller in a card */
+    .inbox.previewing { display: flex; flex-direction: column; height: 420px; max-height: none; overflow: hidden; }
+    .launcher.inbox.previewing:not(.inline) { width: min(640px, calc(100vw - 16px)); height: min(600px, 70vh); }
+
+    .inbox-preview { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+    /* A thread like Gmail's: folded messages show a line of text, open ones their recipients and body */
+    .thread { flex: 1; min-height: 0; overflow-y: auto; }
+    .thread-msg { border-bottom: 1px solid var(--border-sub); }
+    .thread-msg:last-child { border-bottom: none; }
+
+    .thread-head {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) auto;
+      grid-template-areas: "avatar from date" "avatar line line";
+      align-items: center;
+      column-gap: 12px;
+      width: 100%;
+      padding: 8px 16px;
+      border: none;
+      background: none;
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .thread-head:hover { background: var(--hover); }
+    .thread-head .from { grid-area: from; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .thread-head .date { grid-area: date; font-size: 11px; color: var(--text-muted); }
+
+    .thread-head .snippet,
+    .thread-head .to {
+      grid-area: line;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      color: var(--text-low);
+    }
+
+    .thread-msg.open .snippet,
+    .thread-msg:not(.open) .to,
+    .thread-msg:not(.open) iframe { display: none; }
+
+    .thread-msg iframe { display: block; width: 100%; height: 160px; border: none; background: #fff; }
+    .inbox-preview .inbox-head { padding-left: 4px; }
+
+    .inbox-head {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 8px 6px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-sub);
+    }
+
+    .inbox-title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Avatar and text line up with the account head's (.acct-head) */
+    .message {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) auto;
+      grid-template-areas: "avatar from date" "avatar subject subject" "avatar snippet snippet";
+      align-items: start;
+      column-gap: 12px;
+      width: 100%;
+      padding: 8px 16px;
+      border: none;
+      border-bottom: 1px solid var(--border-sub);
+      background: none;
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .message:last-child { border-bottom: none; }
+    .message:hover { background: var(--hover); }
+
+    .sender-avatar {
+      grid-area: avatar;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 16px;
+    }
+
+    .message .from,
+    .message .subject {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .message .from    { grid-area: from; font-weight: 700; }
+    .message .date    { grid-area: date; font-size: 11px; font-weight: 700; }
+    .message .subject { grid-area: subject; font-weight: 700; }
+    /* The feed's excerpt, up to Options → Gmail → Text lines */
+    .message .snippet {
+      grid-area: snippet;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: var(--snippet-lines, 3);
+      overflow: hidden;
+      color: var(--text-low);
+    }
+
+    .no-snippets .message .snippet { display: none; }
+
+    /* Options → Gmail → Sender avatars off */
+    .no-avatars .sender-avatar { display: none; }
+    .no-avatars .message { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "from date" "subject subject" "snippet snippet"; }
+    .no-avatars .thread-head { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "from date" "line line"; }
 
     .panel .section-head {
       padding: 12px 16px;

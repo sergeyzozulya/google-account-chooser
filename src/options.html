@@ -754,10 +754,127 @@
           <span class="slider"></span>
         </label>
       </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Width</div>
+          <div class="hint">Auto is 300 px for the launcher alone and 380 px with dashboard sections. The side panel always fills its width.</div>
+        </div>
+        <select class="select-field" id="popup-width">
+          <option value="auto">Auto</option>
+          <option value="320">320 px</option>
+          <option value="380">380 px</option>
+          <option value="480">480 px</option>
+          <option value="600">600 px</option>
+          <option value="800">800 px</option>
+        </select>
+      </div>
       <!-- What the toolbar popup shows; everything but the launcher comes from the dashboard -->
       <div class="settings-table">
         <div class="table-group"><span>Show in popup</span></div>
         <div id="popup-sections" class="sortable"></div>
+      </div>
+    </div>
+
+    <!-- Gmail -->
+    <div class="card">
+      <div class="card-header"><h2>Gmail</h2></div>
+      <div class="card-row">
+        <div>
+          <div class="label">Expand unread emails</div>
+          <div class="hint">Where each account lists its unread inbox mail right away; the unread badge folds and unfolds the list. Elsewhere the badge opens the list. Popup includes the side panel.</div>
+        </div>
+        <select class="select-field" data-gmail="expandUnread">
+          <option value="never">Never</option>
+          <option value="dashboard">Dashboard</option>
+          <option value="popup">Popup</option>
+          <option value="always">Always</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Emails listed</div>
+          <div class="hint">How many unread emails each account lists, newest first. Gmail's feed has at most 20.</div>
+        </div>
+        <select class="select-field" data-gmail="mailListCount">
+          <option value="3">3</option>
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="all">All</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Text lines</div>
+          <div class="hint">Lines of each email's text under its subject; with none, just the sender and subject.</div>
+        </div>
+        <select class="select-field" data-gmail="mailSnippetLines">
+          <option value="0">None</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Sender avatars</div>
+          <div class="hint">Show a letter avatar for each sender in email lists and threads.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" data-gmail="mailAvatars">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">List header</div>
+          <div class="hint">Show “Inbox” and Open Gmail above the email list in each account card.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" data-gmail="mailListHeader">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Clicking an email</div>
+          <div class="hint">Show its thread in the list, or open it in Gmail. Ctrl/⌘-click always opens it in Gmail.</div>
+        </div>
+        <select class="select-field" data-gmail="mailClick">
+          <option value="preview">Shows the thread</option>
+          <option value="gmail">Opens Gmail</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Thread messages</div>
+          <div class="hint">Which messages of a thread are open when it shows; click a message's header to open or fold it.</div>
+        </div>
+        <select class="select-field" data-gmail="threadOpen">
+          <option value="last">Last open</option>
+          <option value="all">All open</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Check mail every</div>
+          <div class="hint">How often unread counts and emails are refreshed, on the dashboard and on the toolbar icon.</div>
+        </div>
+        <select class="select-field" data-gmail="mailCheckMinutes">
+          <option value="1">1 minute</option>
+          <option value="2">2 minutes</option>
+          <option value="5">5 minutes</option>
+          <option value="15">15 minutes</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Toolbar icon count</div>
+          <div class="hint">Unread count on the extension's toolbar icon.</div>
+        </div>
+        <select class="select-field" id="toolbar-badge" data-gmail="toolbarBadge">
+          <option value="off">Off</option>
+          <option value="all">All accounts</option>
+        </select>
       </div>
     </div>
 

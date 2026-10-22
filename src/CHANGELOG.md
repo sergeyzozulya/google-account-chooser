@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.1.0] — 2026-10-22
+
+### Added
+- **Unread mail** on the dashboard and in the popup and side panel: each account's unread inbox emails (up to 20, from Gmail's feed) with sender, date, subject and text, like the Gmail app; listed right away in the account card, or in a panel from the Gmail unread badge
+- **Email preview**: clicking an email shows its thread in the list, earlier messages folded like in Gmail; Back returns to the list, Open in Gmail opens it in Gmail
+- **Options → Gmail**: Expand unread emails (Never, Dashboard, Popup, Always), Emails listed, Text lines, Sender avatars, List header, Clicking an email, Thread messages, Check mail every, Toolbar icon count (off, all accounts or one account)
+- **Width** (Options → Popup): Auto, or 320 to 800 px
+- A switch for each account in Options → Dashboard → Accounts: a switched-off account has no card on the dashboard or in the popup, isn't offered in search, and its mail isn't checked or counted; open tabs, recent files and statistics still list it
+
+### Changed
+- An account signed out of Gmail shows a grey Gmail icon with an amber "!" instead of none; clicking it opens Gmail to sign in again. Chrome no longer asks for a Gmail username and password
+- With no unread mail, the Gmail badge opens Gmail
+- Opening an email switches to a Gmail tab or web app window already open on that account and shows the email there
+
+---
+
 ## [2.0.2] — 2026-10-20
 
 ### Changed

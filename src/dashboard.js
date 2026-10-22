@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, DASHBOARD_SECTIONS, accountFromUrl, accountServiceUrl, accountKey, orderAccounts, dashboardSections, sectionIcon, formatDate */
+/* global SERVICE_DEFS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, accountFromUrl, accountServiceUrl, accountKey, orderAccounts, dashboardSections, sectionIcon, formatDate */
 
 const DOCS_KINDS = {
   document:     'docs.google.com',
@@ -12,7 +12,6 @@ const SECTION_SPANS = { full: 12, 'two-thirds': 8, half: 6, third: 4 };
 const SVG_APPS = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">${
   [5, 12, 19].flatMap(y => [5, 12, 19].map(x => `<circle cx="${x}" cy="${y}" r="2.2"/>`)).join('')}</svg>`;
 
-const REFRESH_MS = 2 * 60 * 1000;
 const HISTORY_DAYS = 30;
 const MAX_ACCOUNTS = 10;
 
@@ -20,15 +19,21 @@ let accounts = [];       // [{ index, email?, name?, photo? }]
 let detected = false;    // accounts came from Google rather than the manual count
 let detecting = true;    // first detection still running and nothing cached
 let unread = {};         // account index → Gmail unread count
+const signedOut = new Set();  // account indexes whose Gmail session has lapsed (the feed answers 401)
+let mail = {};           // account index → unread inbox messages (Atom feed, at most 20)
+let mailSettings = { ...GMAIL_DEFAULTS };  // Options → Gmail
+let refreshTimer = null;
+const foldedMail = new Set();   // account indexes whose list the unread badge folded
 let accountLabels = {};  // accountKey → nickname (edited in Options)
 let accountOrder = [];   // accountKeys in display order (edited in Options)
+let hiddenAccounts = []; // accountKeys switched off in Options: no card, search or unread count
 let manualCount = 1;
 let columns = 'all';     // accounts per row: 'all' or a number as a string
 let recentPerAccount = 5;
 let titleFormat = 'auto';  // see formatDate in services-data.js
 let openLinks = 'new';   // where links open: 'new' tab, 'current' tab, or 'pinned' (new tab only from a pinned dashboard)
 let sections = [];       // [{ id, label, visible, width, title }] in display order
-let launcherFrame = null;
+let launcher = null;     // the open account launcher frame or inbox panel
 let searchButtons = { google: true, gmail: true, drive: true };
 const searchAccount = {};  // search target → account index chosen in its split button
 
@@ -81,16 +86,20 @@ async function launch(url, service, tabId) {
 }
 
 // A service's start page for an account switches to a tab or web app window already open on that
-// service and account, if any; otherwise the link opens per Options → Dashboard → Open links.
-// newTab (Ctrl/⌘-click) always opens a new one.
+// service and account, if any; a link that differs from such a tab's page only after # (a Gmail
+// message, #inbox/…) switches to it and follows the link there. Otherwise the link opens per
+// Options → Dashboard → Open links. newTab (Ctrl/⌘-click) always opens a new one.
 async function openLink(url, service, newTab = false) {
   const account = accountFromUrl(url);
-  if (!newTab && service && account !== null && url === accountServiceUrl(service, account)) {
-    const tab = (await chrome.tabs.query({})).find(t => t.url && serviceForUrl(t.url) === service && accountFromUrl(t.url) === account);
+  if (!newTab && service && account !== null) {
+    const startPage = url === accountServiceUrl(service, account);
+    const tab = (await chrome.tabs.query({})).find(t => t.url && serviceForUrl(t.url) === service
+      && accountFromUrl(t.url) === account && (startPage || t.url.split('#')[0] === url.split('#')[0]));
     if (tab) {
       chrome.tabs.update(tab.id, { active: true });
       chrome.windows.update(tab.windowId, { focused: true });
-      closePopup();
+      if (startPage) closePopup();
+      else launch(url, service, tab.id);
       return;
     }
   }
@@ -159,8 +168,11 @@ function applyLayout() {
   }
 }
 
+// Accounts with a card, in display order; hidden ones still name open tabs, recent files and stats
+const shownAccounts = () => orderAccounts(accounts.filter(a => !hiddenAccounts.includes(accountKey(a))), accountOrder);
+
 function applyColumns() {
-  const count = columns === 'all' ? Math.max(accounts.length, 1) : Number(columns);
+  const count = columns === 'all' ? Math.max(shownAccounts().length, 1) : Number(columns);
   document.getElementById('accounts').style.gridTemplateColumns = `repeat(${count}, minmax(0, 1fr))`;
 }
 
@@ -192,16 +204,35 @@ async function listAccounts() {
   }
 }
 
-// Gmail's Atom feed gives the unread count and names the account in its title
-// ("Gmail - Inbox for user@example.com"); null when the slot has no feed
+// Gmail's Atom feed gives the unread count, names the account in its title
+// ("Gmail - Inbox for user@example.com") and lists up to 20 unread inbox messages;
+// { signedOut: true } when the account's Gmail session has lapsed, null when the slot has no feed.
+// Fetched by the background worker (see fetchFeed there), so a lapsed session doesn't make
+// Chrome ask for a username and password.
 async function fetchInbox(n) {
   try {
-    const res = await fetch(`https://mail.google.com/mail/u/${n}/feed/atom`, { credentials: 'include' });
-    const doc = new DOMParser().parseFromString(await res.text(), 'text/xml');
+    const feed = await chrome.runtime.sendMessage({ type: 'feed', n });
+    if (feed?.status === 401) return { signedOut: true };
+    if (!feed?.text) return null;
+    const doc = new DOMParser().parseFromString(feed.text, 'text/xml');
     const count = doc.getElementsByTagName('fullcount')[0];
     if (!count) return null;
     const title = doc.getElementsByTagName('title')[0]?.textContent || '';
-    return { count: Number(count.textContent), email: title.match(/\S+@\S+/)?.[0] ?? null };
+    const messages = [...doc.getElementsByTagName('entry')].map((entry) => {
+      const text = (tag) => entry.getElementsByTagName(tag)[0]?.textContent || '';
+      // The feed's own link names the account by email, which Account Chooser would intercept
+      const href = entry.getElementsByTagName('link')[0]?.getAttribute('href');
+      const id = href && new URL(href).searchParams.get('message_id');
+      return {
+        from: text('name') || text('email'),
+        subject: text('title'),
+        snippet: text('summary'),
+        time: Date.parse(text('issued') || text('modified')),
+        id,
+        url: accountServiceUrl('mail.google.com', n) + (id ? `#inbox/${id}` : ''),
+      };
+    });
+    return { count: Number(count.textContent), email: title.match(/\S+@\S+/)?.[0] ?? null, messages };
   } catch {
     return null;
   }
@@ -224,7 +255,7 @@ async function detectAccounts() {
 }
 
 function saveCache() {
-  if (detected) chrome.storage.local.set({ accountsCache: { accounts, unread } });
+  if (detected) chrome.storage.local.set({ accountsCache: { accounts, unread, mail } });
 }
 
 // Re-detect accounts and unread counts; the page renders from cache meanwhile
@@ -244,12 +275,27 @@ async function refresh() {
     renderAll();
   }
 
-  await Promise.all(accounts.map(async (a) => {
+  // Hidden accounts' mail isn't checked or counted
+  for (const a of accounts) {
+    if (shownAccounts().includes(a)) continue;
+    delete unread[a.index];
+    delete mail[a.index];
+    signedOut.delete(a.index);
+  }
+  await Promise.all(shownAccounts().map(async (a) => {
     const inbox = await fetchInbox(a.index);
-    if (inbox) unread[a.index] = inbox.count;
-    else delete unread[a.index];
+    if (inbox?.signedOut) signedOut.add(a.index);
+    else signedOut.delete(a.index);
+    if (inbox && !inbox.signedOut) {
+      unread[a.index] = inbox.count;
+      mail[a.index] = inbox.messages;
+    } else {
+      delete unread[a.index];
+      delete mail[a.index];
+    }
   }));
   renderUnread();
+  renderMail();
   saveCache();
   chrome.runtime.sendMessage({ type: 'unread', unread });
 }
@@ -259,7 +305,7 @@ function renderAccounts() {
   const gmail = SERVICE_DEFS['mail.google.com'];
   applyColumns();
 
-  el.innerHTML = orderAccounts(accounts, accountOrder).map(a => {
+  el.innerHTML = shownAccounts().map(a => {
     const name = displayName(a);
     const secondary = accountLabels[accountKey(a)] ? a.email : a.name;
 
@@ -271,8 +317,8 @@ function renderAccounts() {
             <div class="acct-name">${esc(name)}</div>
             ${secondary ? `<div class="acct-email">${esc(secondary)}</div>` : ''}
           </div>
-          <button class="unread" data-url="${esc(accountServiceUrl('mail.google.com', a.index))}"
-                  data-service="mail.google.com" title="Open Gmail inbox" hidden>
+          <button class="unread" data-inbox="${a.index}" data-url="${esc(accountServiceUrl('mail.google.com', a.index))}"
+                  data-service="mail.google.com" title="Unread mail (Ctrl/⌘-click opens Gmail)" hidden>
             ${gmail.icon}<b></b>
           </button>
           <button class="icon-btn" data-launcher="${a.index}" title="Google apps">${SVG_APPS}</button>
@@ -288,15 +334,20 @@ function renderAccounts() {
 
   renderSearch();
   renderUnread();
+  renderMail();
 }
 
 function renderUnread() {
   for (const a of accounts) {
     const btn = document.querySelector(`section[data-index="${a.index}"] .unread`);
     if (!btn) continue;
-    btn.hidden = !(a.index in unread);
+    // Signed out of Gmail: a warning badge, and a click opens Gmail to sign in again
+    const out = signedOut.has(a.index);
+    btn.hidden = !out && !(a.index in unread);
     btn.classList.toggle('empty-inbox', unread[a.index] === 0);
-    btn.querySelector('b').textContent = unread[a.index] > 999 ? '999+' : unread[a.index] ?? '';
+    btn.classList.toggle('signed-out', out);
+    btn.title = out ? 'Signed out of Gmail — click to sign in' : 'Unread mail (Ctrl/⌘-click opens Gmail)';
+    btn.querySelector('b').textContent = out ? '!' : unread[a.index] > 999 ? '999+' : unread[a.index] ?? '';
   }
 }
 
@@ -319,7 +370,7 @@ const SEARCH_TARGETS = {
 const searchButtonsEl = document.getElementById('search-buttons');
 
 function renderSearch() {
-  const list = orderAccounts(accounts, accountOrder);
+  const list = shownAccounts();
   const shown = Object.keys(SEARCH_TARGETS).filter(t => searchButtons[t]);
 
   searchButtonsEl.innerHTML = shown.map((t, i) => {
@@ -398,39 +449,49 @@ document.addEventListener('click', (e) => {
 
 function openLauncher(btn) {
   const index = btn.dataset.launcher;
-  const wasOpen = launcherFrame?.dataset.index === index;
-  closeLauncher();
-  if (wasOpen) return;
+  if (toggleOff('launcher', index)) return;
 
   const frame = document.createElement('iframe');
   frame.className = 'launcher';
-  frame.dataset.index = index;
   frame.src = `popup.html?account=${index}`;
   frame.addEventListener('load', () => frame.contentWindow.focus());
+  placeLauncher(frame, btn, 'launcher', index);
+}
+
+// Closes any open launcher or inbox; true when it was this one, so its button toggles it off
+function toggleOff(kind, index) {
+  const wasOpen = launcher?.dataset.kind === kind && launcher.dataset.index === index;
+  closeLauncher();
+  return wasOpen;
+}
+
+function placeLauncher(el, btn, kind, index) {
+  el.dataset.kind = kind;
+  el.dataset.index = index;
   if (embedded) {
     // In the toolbar popup there's no room for a floating panel: expand inside the account card
-    frame.classList.add('inline');
-    btn.closest('section.card').append(frame);
+    el.classList.add('inline');
+    btn.closest('section.card').append(el);
   } else {
     const r = btn.getBoundingClientRect();
-    frame.style.top = `${r.bottom + scrollY + 6}px`;
-    frame.style.left = `${Math.max(8, r.right + scrollX - 300)}px`;
-    document.body.append(frame);
+    el.style.top = `${r.bottom + scrollY + 6}px`;
+    el.style.left = `${Math.max(8, r.right + scrollX - 300)}px`;
+    document.body.append(el);
   }
-  launcherFrame = frame;
+  launcher = el;
 }
 
 function closeLauncher() {
-  launcherFrame?.remove();
-  launcherFrame = null;
+  launcher?.remove();
+  launcher = null;
   postHeight();
 }
 
 window.addEventListener('message', (e) => {
-  if (e.origin !== location.origin || e.source !== launcherFrame?.contentWindow) return;
+  if (e.origin !== location.origin || e.source !== launcher?.contentWindow) return;
   const msg = e.data;
   if (msg.type === 'resize') {
-    launcherFrame.style.height = `${msg.height + (embedded ? 1 : 2)}px`;
+    launcher.style.height = `${msg.height + (embedded ? 1 : 2)}px`;
     postHeight();
   }
   if (msg.type === 'close') closeLauncher();
@@ -451,6 +512,252 @@ window.addEventListener('resize', () => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeLauncher();
 });
+
+// ── Inbox ──────────────────────────────────────────────────────────────────
+
+// An account's unread inbox mail (the Atom feed's, at most 20) is listed right away in its card
+// where Options → Gmail → Expand unread emails says so, and the unread badge folds and unfolds it;
+// elsewhere the badge opens the list in a panel placed like the launcher's. Ctrl/⌘-click on the
+// badge opens Gmail. A message opens in its list (Ctrl/⌘-click: in Gmail), with Back to the list.
+const PREVIEW_WIDTH = 640;
+
+const mailExpanded = () => mailSettings.expandUnread === 'always' || mailSettings.expandUnread === (embedded ? 'popup' : 'dashboard');
+
+// The emails a list shows (Options → Gmail → Emails listed)
+const listed = (messages) => mailSettings.mailListCount === 'all' ? messages : messages.slice(0, Number(mailSettings.mailListCount));
+
+// Avatars and text lines (Options → Gmail) are styles, so lists needn't be redrawn for them
+function applyMailLook() {
+  document.body.classList.toggle('no-avatars', !mailSettings.mailAvatars);
+  document.body.classList.toggle('no-list-header', !mailSettings.mailListHeader);
+  document.body.classList.toggle('no-snippets', mailSettings.mailSnippetLines === 0);
+  document.body.style.setProperty('--snippet-lines', mailSettings.mailSnippetLines || 1);
+}
+
+// Re-detection and unread counts every Options → Gmail → Check mail every
+function scheduleRefresh() {
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(refresh, mailSettings.mailCheckMinutes * 60 * 1000);
+}
+
+function messagesHtml(messages) {
+  return messages.map(m => `
+    <button class="message" data-message="${esc(m.id)}" data-url="${esc(m.url)}" data-service="mail.google.com" title="${esc(m.subject)}">
+      <span class="sender-avatar" style="background: ${senderColor(m.from)}">${esc(m.from.charAt(0).toUpperCase())}</span>
+      <span class="from">${esc(m.from)}</span>
+      <span class="date">${mailDate(m.time)}</span>
+      <span class="subject">${esc(m.subject || '(no subject)')}</span>
+      <span class="snippet">${esc(m.snippet)}</span>
+    </button>`).join('');
+}
+
+// Expanded lists in the account cards, redrawn only when their messages change and not while
+// one shows a message
+function renderMail() {
+  for (const a of accounts) {
+    const card = document.querySelector(`section.card[data-index="${a.index}"]`);
+    if (!card) continue;
+    let list = card.querySelector(':scope > .inbox');
+    if (!mailExpanded() || foldedMail.has(a.index) || !mail[a.index]?.length) {
+      list?.remove();
+      continue;
+    }
+    if (list?.classList.contains('previewing')) continue;
+    const ids = listed(mail[a.index]).map(m => m.id).join();
+    if (list?.dataset.ids === ids) continue;
+    if (!list) {
+      list = document.createElement('div');
+      list.className = 'inbox in-card';
+      list.dataset.index = a.index;
+      card.append(list);
+    }
+    list.dataset.ids = ids;
+    list.innerHTML = `
+      <div class="inbox-view">
+        ${inboxHead(accountServiceUrl('mail.google.com', a.index))}
+        <div class="inbox-list">${messagesHtml(listed(mail[a.index]))}</div>
+      </div>`;
+  }
+}
+
+// With no unread mail there's nothing to list, and signed out there's no list to get: the badge
+// opens Gmail (which asks to sign in)
+// "Inbox" and Open Gmail above a list; hidden in cards by Options → Gmail → List header
+const inboxHead = (gmailUrl) => `
+  <div class="inbox-head">
+    <span class="inbox-title">Inbox</span>
+    <button class="text-btn" data-url="${esc(gmailUrl)}" data-service="mail.google.com">Open Gmail</button>
+  </div>`;
+
+function onUnreadBadge(btn) {
+  if (unread[btn.dataset.inbox] === 0 || signedOut.has(Number(btn.dataset.inbox))) {
+    openLink(btn.dataset.url, btn.dataset.service);
+    return;
+  }
+  if (!mailExpanded()) {
+    openInbox(btn);
+    return;
+  }
+  const index = Number(btn.dataset.inbox);
+  if (!foldedMail.delete(index)) foldedMail.add(index);
+  renderMail();
+}
+
+async function openInbox(btn) {
+  const index = btn.dataset.inbox;
+  if (toggleOff('inbox', index)) return;
+
+  const panel = document.createElement('div');
+  panel.className = 'launcher inbox';
+  panel.innerHTML = `
+    <div class="inbox-view">
+      ${inboxHead(btn.dataset.url)}
+      <div class="empty">Loading…</div>
+    </div>`;
+  placeLauncher(panel, btn, 'inbox', index);
+
+  const inbox = await fetchInbox(index);
+  if (launcher !== panel) return;
+  if (inbox?.signedOut) {
+    signedOut.add(Number(index));
+    renderUnread();
+    closeLauncher();
+    openLink(btn.dataset.url, btn.dataset.service);
+    return;
+  }
+  if (inbox) {
+    unread[index] = inbox.count;
+    mail[index] = inbox.messages;
+    renderUnread();
+  }
+  panel.querySelector('.empty').outerHTML = !inbox
+    ? '<div class="empty">Couldn\'t load this inbox.</div>'
+    : `<div class="inbox-list">${messagesHtml(listed(inbox.messages)) || '<div class="empty">No unread mail in the inbox.</div>'}</div>`;
+}
+
+// The message's thread from Gmail's print view, laid out like Gmail's: earlier messages folded to
+// a line, the last one open, a click on a message's head folds or unfolds it. The floating panel
+// widens to the left, keeping its right edge under the badge.
+async function showMessage(btn) {
+  const panel = btn.closest('.inbox');
+  panel.querySelector('.inbox-view').hidden = true;
+  panel.classList.add('previewing');
+  if (panel === launcher && !embedded) {
+    panel.dataset.left = panel.style.left;
+    panel.style.left = `${Math.max(8, parseFloat(panel.style.left) + 300 - PREVIEW_WIDTH)}px`;
+  }
+  panel.insertAdjacentHTML('beforeend', `
+    <div class="inbox-preview">
+      <div class="inbox-head">
+        <button class="icon-btn" data-back title="Back">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        </button>
+        <span class="inbox-title">${esc(btn.title || '(no subject)')}</span>
+        <button class="text-btn" data-url="${esc(btn.dataset.url)}" data-service="mail.google.com">Open in Gmail</button>
+      </div>
+      <div class="empty">Loading…</div>
+    </div>`);
+  const preview = panel.lastElementChild;
+
+  const thread = await fetchThread(panel.dataset.index, btn.dataset.message);
+  if (!preview.isConnected) return;
+  if (!thread) {
+    preview.querySelector('.empty').textContent = 'Couldn\'t load this message.';
+    return;
+  }
+  // Without a recognisable message list (the print view's layout changed), the whole page as one
+  const messages = thread.messages.length ? thread.messages : [{ html: thread.page }];
+  preview.querySelector('.empty').outerHTML = `<div class="thread">${messages.map((m, i) => `
+    <div class="thread-msg${i === messages.length - 1 || mailSettings.threadOpen === 'all' ? ' open' : ''}">
+      ${m.from === undefined ? '' : `
+        <button class="thread-head">
+          <span class="sender-avatar" style="background: ${senderColor(m.from)}">${esc(m.from.charAt(0).toUpperCase())}</span>
+          <span class="from">${esc(m.from)}</span>
+          <span class="date">${esc(m.date)}</span>
+          <span class="snippet">${esc(m.snippet)}</span>
+          <span class="to">${esc(m.to)}</span>
+        </button>`}
+    </div>`).join('')}</div>`;
+  // Frames are made on first unfold, so folded messages cost nothing
+  const items = [...preview.querySelectorAll('.thread-msg')];
+  const frameFor = (i) => messageFrame(thread.head + messages[i].html);
+  items.forEach((item, i) => { if (item.classList.contains('open')) item.append(frameFor(i)); });
+  preview.querySelector('.thread').addEventListener('click', (e) => {
+    const item = e.target.closest('.thread-head')?.parentElement;
+    if (!item) return;
+    item.classList.toggle('open');
+    if (!item.querySelector('iframe')) item.append(frameFor(items.indexOf(item)));
+  });
+}
+
+// A message body in a sandboxed frame: no scripts, links open in new tabs. allow-same-origin
+// (harmless without allow-scripts) lets the frame be sized to its content once it has loaded.
+function messageFrame(html) {
+  const frame = document.createElement('iframe');
+  frame.sandbox = 'allow-same-origin allow-popups allow-popups-to-escape-sandbox';
+  frame.srcdoc = html;
+  frame.addEventListener('load', () => {
+    frame.style.height = `${frame.contentDocument.documentElement.scrollHeight}px`;
+  });
+  return frame;
+}
+
+function showList(panel) {
+  panel.querySelector('.inbox-preview').remove();
+  panel.querySelector('.inbox-view').hidden = false;
+  panel.classList.remove('previewing');
+  if (panel === launcher && !embedded) panel.style.left = panel.dataset.left;
+  renderMail();
+}
+
+// Gmail's print view of a thread, split into its messages (table.message: sender and date, then
+// recipients, then the body); head is the page's styles and base for each message's frame, page
+// the whole thread for when no messages are found. Null on failure.
+async function fetchThread(index, id) {
+  try {
+    const res = await fetch(`https://mail.google.com/mail/u/${index}/?view=pt&search=all&th=${encodeURIComponent(id)}`,
+      { credentials: 'include' });
+    if (!res.ok) return null;
+    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+    doc.querySelectorAll('script').forEach(el => el.remove());
+    const head = `<!doctype html><meta charset="utf-8"><base href="https://mail.google.com/mail/u/${index}/" target="_blank">`
+      + [...doc.querySelectorAll('style')].map(el => el.outerHTML).join('')
+      + '<style>body { margin: 8px 16px 16px; }</style>';
+    const messages = [...doc.querySelectorAll('table.message')]
+      .filter(table => !table.parentElement.closest('table.message') && table.rows.length >= 2)
+      .map((table) => {
+        const [sender, date] = table.rows[0].cells;
+        const body = [...table.rows].at(-1).cells[0];
+        return {
+          from: (sender.querySelector('b') || sender).textContent.trim(),
+          date: date?.textContent.trim() || '',
+          to: table.querySelector('.recipient')?.textContent.replace(/\s+/g, ' ').trim() || '',
+          snippet: body.textContent.replace(/\s+/g, ' ').trim().slice(0, 200),
+          html: body.innerHTML,
+        };
+      });
+    return { head, messages, page: (doc.querySelector('.maincontent') || doc.body).outerHTML };
+  } catch {
+    return null;
+  }
+}
+
+// Dates as Gmail lists them: time today, month and day this year, a short date before that
+function mailDate(ms) {
+  const d = new Date(ms);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString([], { year: '2-digit', month: 'numeric', day: 'numeric' });
+}
+
+// A steady letter-avatar colour per sender, like the Gmail app's
+function senderColor(name) {
+  let hash = 0;
+  for (const c of name) hash = (hash * 31 + c.charCodeAt(0)) % 360;
+  return `hsl(${hash} 45% 45%)`;
+}
 
 // ── Open tabs ──────────────────────────────────────────────────────────────
 
@@ -752,15 +1059,18 @@ async function init() {
   renderClock();
   addSectionIcons();
   const data = await chrome.storage.sync.get({
-    accountLabels: {}, accountOrder: [], manualAccountCount: 1, dashboardColumns: 'all', dashboardSections: null, recentPerAccount: 5,
-    searchButtons: searchButtons, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', newTabTitle: '',
+    accountLabels: {}, accountOrder: [], hiddenAccounts: [], manualAccountCount: 1, dashboardColumns: 'all', dashboardSections: null, recentPerAccount: 5,
+    searchButtons: searchButtons, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', newTabTitle: '', ...GMAIL_DEFAULTS,
   });
   titleFormat = data.dashboardTitleFormat;
   openLinks = data.dashboardOpenLinks;
+  mailSettings = Object.fromEntries(Object.keys(GMAIL_DEFAULTS).map(key => [key, data[key]]));
+  applyMailLook();
   if (isNewTab) document.title = data.newTabTitle || NEW_TAB_TITLE;
   renderClock();
   accountLabels = data.accountLabels;
   accountOrder = data.accountOrder;
+  hiddenAccounts = data.hiddenAccounts;
   manualCount = data.manualAccountCount;
   columns = data.dashboardColumns;
   recentPerAccount = data.recentPerAccount;
@@ -784,19 +1094,29 @@ async function init() {
   if (accountsCache?.accounts?.length) {
     accounts = accountsCache.accounts;
     unread = accountsCache.unread || {};
+    mail = accountsCache.mail || {};
     detected = true;
     detecting = false;
   }
 
   renderAll();
   refresh();
-  setInterval(refresh, REFRESH_MS);
+  scheduleRefresh();
 }
 
 document.addEventListener('click', async (e) => {
   const launcherBtn = e.target.closest('[data-launcher]');
   if (launcherBtn) { openLauncher(launcherBtn); return; }
-  closeLauncher();
+
+  const inbox = e.target.closest('[data-inbox]');
+  if (inbox && !e.ctrlKey && !e.metaKey) { onUnreadBadge(inbox); return; }
+
+  const message = e.target.closest('[data-message]');
+  if (message && !e.ctrlKey && !e.metaKey && mailSettings.mailClick === 'preview') { showMessage(message); return; }
+  if (e.target.closest('[data-back]')) { showList(e.target.closest('.inbox')); return; }
+
+  // Clicks inside the inbox panel keep it open, except on a link
+  if (!e.target.closest('.inbox') || e.target.closest('[data-url]')) closeLauncher();
 
   const link = e.target.closest('[data-url]');
   if (link) { openLink(link.dataset.url, link.dataset.service, e.ctrlKey || e.metaKey); return; }
@@ -858,6 +1178,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync') return;
   if (changes.newTabTitle && isNewTab) document.title = changes.newTabTitle.newValue || NEW_TAB_TITLE;
   if (changes.dashboardOpenLinks) openLinks = changes.dashboardOpenLinks.newValue;
+  const mailChanges = Object.keys(GMAIL_DEFAULTS).filter(key => changes[key]);
+  if (mailChanges.length) {
+    for (const key of mailChanges) mailSettings[key] = changes[key].newValue ?? GMAIL_DEFAULTS[key];
+    applyMailLook();
+    renderMail();
+    if (changes.mailCheckMinutes) scheduleRefresh();
+  }
   if (changes.dashboardTitleFormat) {
     titleFormat = changes.dashboardTitleFormat.newValue;
     renderClock();
@@ -879,6 +1206,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
     accountLabels = changes.accountLabels?.newValue ?? accountLabels;
     accountOrder = changes.accountOrder?.newValue ?? accountOrder;
     renderAll();
+  }
+  if (changes.hiddenAccounts) {
+    hiddenAccounts = changes.hiddenAccounts.newValue ?? [];
+    renderAll();
+    refresh();
   }
   if (changes.dashboardSections && !embedded) {
     sections = dashboardSections(changes.dashboardSections.newValue);

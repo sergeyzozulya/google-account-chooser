@@ -1,5 +1,5 @@
 importScripts('services-data.js');
-/* global SERVICE_DEFS, accountFromUrl */
+/* global SERVICE_DEFS, GMAIL_DEFAULTS, accountFromUrl, accountKey */
 
 // Build the intercept lookup from the shared service definitions
 const DEFAULT_SERVICES = Object.fromEntries(
@@ -173,36 +173,54 @@ chrome.tabs.onCreated.addListener(async (tab) => {
 // ── Unread badge on the toolbar icon ───────────────────────────────────────
 
 const UNREAD_ALARM = 'unread';
-const UNREAD_PERIOD_MIN = 2;
 const MAX_ACCOUNTS = 10;
 
-// Gmail's Atom feed for account slot n: unread count and the account's email, or null
-async function fetchInbox(n) {
+// Gmail's Atom feed for account slot n: { status, text } (text only when it loaded), or null.
+// A slot whose session has lapsed answers 401 with a Basic-auth challenge: fetched from a page,
+// Chrome asks for a username and password; from this worker, which has no page to ask on, the
+// request just fails. So the dashboard reads feeds through here too.
+async function fetchFeed(n) {
   try {
     const res = await fetch(`https://mail.google.com/mail/u/${n}/feed/atom`, { credentials: 'include' });
-    const text = await res.text();
-    const count = text.match(/<fullcount>(\d+)<\/fullcount>/);
-    if (!count) return null;
-    return { count: Number(count[1]), email: text.match(/<title>[^<]*?(\S+@[^\s<]+)/)?.[1] ?? null };
+    return { status: res.status, text: res.ok ? await res.text() : null };
   } catch {
     return null;
   }
 }
 
-function showUnread(unread) {
-  const total = Object.values(unread).reduce((sum, n) => sum + n, 0);
+// Unread count and the account's email for account slot n, or null
+async function fetchInbox(n) {
+  const text = (await fetchFeed(n))?.text;
+  const count = text?.match(/<fullcount>(\d+)<\/fullcount>/);
+  if (!count) return null;
+  return { count: Number(count[1]), email: text.match(/<title>[^<]*?(\S+@[^\s<]+)/)?.[1] ?? null };
+}
+
+// Total across accounts, or one account's count (Options → Gmail → Toolbar icon count)
+async function showUnread(unread) {
+  const { toolbarBadge } = await chrome.storage.sync.get({ toolbarBadge: GMAIL_DEFAULTS.toolbarBadge });
+  let counts = Object.entries(unread);
+  if (toolbarBadge === 'off') counts = [];
+  else if (toolbarBadge !== 'all') {
+    const { accountsCache } = await chrome.storage.local.get('accountsCache');
+    const account = accountsCache?.accounts?.find(a => accountKey(a) === toolbarBadge);
+    counts = counts.filter(([index]) => Number(index) === account?.index);
+  }
+  const total = counts.reduce((sum, [, n]) => sum + n, 0);
   chrome.action.setBadgeBackgroundColor({ color: '#d93025' });
   chrome.action.setBadgeTextColor?.({ color: '#ffffff' });
   chrome.action.setBadgeText({ text: total > 999 ? '999+' : total > 0 ? String(total) : '' });
 }
 
 // Total unread across the accounts the dashboard detected, or, before it has run,
-// across Gmail slots /u/0/, /u/1/, … until one has no feed or repeats an account
+// across Gmail slots /u/0/, /u/1/, … until one has no feed or repeats an account. Accounts
+// switched off in Options aren't counted.
 async function refreshUnread() {
   const { accountsCache } = await chrome.storage.local.get('accountsCache');
+  const { hiddenAccounts } = await chrome.storage.sync.get({ hiddenAccounts: [] });
   const unread = {};
   if (accountsCache?.accounts?.length) {
-    await Promise.all(accountsCache.accounts.map(async (a) => {
+    await Promise.all(accountsCache.accounts.filter(a => !hiddenAccounts.includes(accountKey(a))).map(async (a) => {
       const inbox = await fetchInbox(a.index);
       if (inbox) unread[a.index] = inbox.count;
     }));
@@ -212,15 +230,25 @@ async function refreshUnread() {
       const inbox = await fetchInbox(n);
       if (!inbox?.email || seen.has(inbox.email)) break;
       seen.add(inbox.email);
-      unread[n] = inbox.count;
+      if (!hiddenAccounts.includes(accountKey({ index: n, email: inbox.email }))) unread[n] = inbox.count;
     }
   }
   showUnread(unread);
 }
 
-// create() restarts the timer, so only create the alarm when it's missing
-chrome.alarms.get(UNREAD_ALARM, (alarm) => {
-  if (!alarm) chrome.alarms.create(UNREAD_ALARM, { delayInMinutes: 0, periodInMinutes: UNREAD_PERIOD_MIN });
+// Every Options → Gmail → Check mail every. create() restarts the timer, so only create the alarm
+// when it's missing or its period changed.
+async function scheduleUnread() {
+  const { mailCheckMinutes } = await chrome.storage.sync.get({ mailCheckMinutes: GMAIL_DEFAULTS.mailCheckMinutes });
+  const alarm = await chrome.alarms.get(UNREAD_ALARM);
+  if (alarm?.periodInMinutes === mailCheckMinutes) return;
+  chrome.alarms.create(UNREAD_ALARM, { delayInMinutes: alarm ? mailCheckMinutes : 0, periodInMinutes: mailCheckMinutes });
+}
+scheduleUnread();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'sync') return;
+  if (changes.mailCheckMinutes) scheduleUnread();
+  if (changes.toolbarBadge || changes.hiddenAccounts) refreshUnread();
 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === UNREAD_ALARM) refreshUnread();
@@ -248,6 +276,10 @@ function recordLaunch(host, account) {
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.type === 'feed') {
+    fetchFeed(msg.n).then(sendResponse);
+    return true;
+  }
   // The dashboard sends fresh unread counts after each refresh
   if (msg.type === 'unread') showUnread(msg.unread);
   if (msg.type === 'open') {

@@ -101,6 +101,19 @@ function accountServiceUrl(host, n) {
   return ACCOUNT_URLS[host] ? ACCOUNT_URLS[host](n) : `https://${host}/?authuser=${n}`;
 }
 
+// Options → Gmail, with their defaults
+const GMAIL_DEFAULTS = {
+  expandUnread: 'always',  // where accounts list unread mail right away: 'never', 'dashboard', 'popup' or 'always'
+  mailListCount: 'all',    // emails listed per account: '3', '5', '10' or 'all' (the feed has at most 20)
+  mailSnippetLines: 3,     // lines of each email's text in lists, 0–3
+  mailAvatars: true,       // sender avatars in lists and threads
+  mailListHeader: true,    // "Inbox" and Open Gmail above lists in account cards
+  mailClick: 'preview',    // clicking an email: 'preview' (in its list) or 'gmail'
+  threadOpen: 'last',      // messages open when a thread shows: 'last' or 'all'
+  mailCheckMinutes: 2,     // how often unread mail is checked
+  toolbarBadge: 'all',     // toolbar icon count: 'off', 'all', or one account's accountKey
+};
+
 // Dashboard sections in default order; width is a share of the page row
 const DASHBOARD_SECTIONS = [
   // Chrome-style bookmarks bar; dashboard only, there's no room for its menus in the popup

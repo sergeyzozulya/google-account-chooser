@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, SERVICE_GROUPS, DASHBOARD_SECTIONS, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate */
+/* global SERVICE_DEFS, SERVICE_GROUPS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate */
 
 // Build per-service defaults from shared definitions
 const DEFAULT_SERVICES = Object.fromEntries(
@@ -16,6 +16,7 @@ let state = {
   popupPlacement: 'center',
   popupSize: 'custom',
   showPopupTitle: true,
+  popupWidth: 'auto',     // toolbar popup width in px as a string, or 'auto'
   showMenuTitles: true,
   showMenuServices: true,
   showMenuGroups: true,
@@ -24,6 +25,7 @@ let state = {
   recentPerAccount: 5,
   dashboardTitleFormat: 'auto',
   dashboardOpenLinks: 'new', // 'new', 'current' or 'pinned' (new tab only from a pinned dashboard)
+  ...GMAIL_DEFAULTS,      // Options → Gmail
   popupSections: { search: false, accounts: false, tabs: false, recent: false, stats: false },
   popupOrder: [],        // launcher + dashboard section ids, in popup order
   searchButtons: { google: true, gmail: true, drive: true },
@@ -31,6 +33,7 @@ let state = {
   accounts: [],          // dashboard accounts ({ index, email?, name?, photo? }) in display order
   accountOrder: [],      // accountKeys in display order
   accountLabels: {},     // accountKey → nickname
+  hiddenAccounts: [],    // accountKeys switched off: not shown or counted anywhere
   groups: [],     // array of { label, hosts[] }
   services: {},   // host → { intercept, popup, menu }
 };
@@ -65,6 +68,7 @@ function save() {
     popupPlacement: state.popupPlacement,
     popupSize: state.popupSize,
     showPopupTitle: state.showPopupTitle,
+    popupWidth: state.popupWidth,
     showMenuTitles: state.showMenuTitles,
     showMenuServices: state.showMenuServices,
     showMenuGroups: state.showMenuGroups,
@@ -73,12 +77,14 @@ function save() {
     recentPerAccount: state.recentPerAccount,
     dashboardTitleFormat: state.dashboardTitleFormat,
     dashboardOpenLinks: state.dashboardOpenLinks,
+    ...Object.fromEntries(Object.keys(GMAIL_DEFAULTS).map(key => [key, state[key]])),
     popupSections: state.popupSections,
     popupOrder: state.popupOrder,
     searchButtons: state.searchButtons,
     dashboardSections: state.dashboardSections.map(({ id, visible, width, title }) => ({ id, visible, width, title })),
     accountOrder: state.accountOrder,
     accountLabels: state.accountLabels,
+    hiddenAccounts: state.hiddenAccounts,
     groups: state.groups.map(g => ({ id: g.id, label: g.label, hosts: [...g.hosts] })),
     services: toSave,
   });
@@ -524,6 +530,35 @@ document.getElementById('dashboard-open-links').addEventListener('change', (e) =
   save();
 });
 
+// Options → Gmail: each control (data-gmail="setting") saves its setting; numbers stay numbers
+for (const el of document.querySelectorAll('[data-gmail]')) {
+  el.addEventListener('change', () => {
+    const key = el.dataset.gmail;
+    state[key] = el.type === 'checkbox' ? el.checked
+      : typeof GMAIL_DEFAULTS[key] === 'number' ? Number(el.value) : el.value;
+    save();
+  });
+}
+
+function renderGmailSettings() {
+  for (const el of document.querySelectorAll('[data-gmail]')) {
+    if (el.type === 'checkbox') el.checked = state[el.dataset.gmail];
+    else el.value = state[el.dataset.gmail];
+  }
+}
+
+// Toolbar icon count: off, all accounts, or one of the dashboard's accounts
+function renderToolbarBadgeOptions() {
+  const select = document.getElementById('toolbar-badge');
+  select.querySelectorAll('[data-account]').forEach(o => o.remove());
+  for (const a of state.accounts.filter(a => !state.hiddenAccounts.includes(accountKey(a)))) {
+    const option = new Option(state.accountLabels[accountKey(a)] || a.email || `Account ${a.index}`, accountKey(a));
+    option.dataset.account = '';
+    select.append(option);
+  }
+  select.value = state.toolbarBadge;
+}
+
 document.getElementById('dashboard-columns').addEventListener('change', (e) => {
   state.dashboardColumns = e.target.value;
   save();
@@ -583,6 +618,10 @@ function renderDashboardAccounts() {
           </div>
           ${secondary ? `<div class="hint">${esc(secondary)}</div>` : ''}
         </div>
+        <label class="switch" title="Show this account">
+          <input type="checkbox" data-field="visible" ${state.hiddenAccounts.includes(accountKey(a)) ? '' : 'checked'}>
+          <span class="slider"></span>
+        </label>
       </div>`;
   }).join('');
 }
@@ -693,6 +732,17 @@ document.getElementById('dashboard-accounts').addEventListener('click', (e) => {
   if (e.target.closest('.save-btn')) saveAccountName(row);
 });
 
+// A switched-off account isn't shown or counted anywhere (cards, search, unread counts);
+// open tabs, recent files and statistics still list it
+document.getElementById('dashboard-accounts').addEventListener('change', (e) => {
+  if (e.target.dataset.field !== 'visible') return;
+  const key = accountKey(state.accounts[Number(e.target.closest('[data-index]').dataset.index)]);
+  state.hiddenAccounts = state.hiddenAccounts.filter(k => k !== key);
+  if (!e.target.checked) state.hiddenAccounts.push(key);
+  renderToolbarBadgeOptions();
+  save();
+});
+
 document.getElementById('dashboard-accounts').addEventListener('keydown', (e) => {
   if (!e.target.classList.contains('account-name-input')) return;
   if (e.key === 'Enter') saveAccountName(e.target.closest('[data-index]'));
@@ -706,6 +756,11 @@ document.getElementById('popup-placement').addEventListener('change', (e) => {
 
 document.getElementById('popup-size').addEventListener('change', (e) => {
   state.popupSize = e.target.value;
+  save();
+});
+
+document.getElementById('popup-width').addEventListener('change', (e) => {
+  state.popupWidth = e.target.value;
   save();
 });
 
@@ -776,7 +831,7 @@ document.getElementById('service-list').addEventListener('change', (e) => {
 // ── Init ───────────────────────────────────────────────────────────────────
 
 chrome.storage.sync.get(
-  { enabled: true, dashboardNewTab: false, newTabTitle: '', actionOpens: 'popup', popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, showMenuTitles: true, showMenuServices: true, showMenuGroups: true, keyboardNav: true, dashboardColumns: 'all', recentPerAccount: 5, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', popupSections: {}, popupOrder: null, searchButtons: {}, dashboardSections: null, accountOrder: [], accountLabels: {}, manualAccountCount: 1, groups: null, services: {} },
+  { enabled: true, dashboardNewTab: false, newTabTitle: '', actionOpens: 'popup', popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, popupWidth: 'auto', showMenuTitles: true, showMenuServices: true, showMenuGroups: true, keyboardNav: true, dashboardColumns: 'all', recentPerAccount: 5, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', ...GMAIL_DEFAULTS, popupSections: {}, popupOrder: null, searchButtons: {}, dashboardSections: null, accountOrder: [], accountLabels: {}, hiddenAccounts: [], manualAccountCount: 1, groups: null, services: {} },
   (data) => {
     state.enabled = data.enabled;
     state.dashboardNewTab = data.dashboardNewTab;
@@ -785,6 +840,7 @@ chrome.storage.sync.get(
     state.popupPlacement = data.popupPlacement;
     state.popupSize = data.popupSize;
     state.showPopupTitle = data.showPopupTitle;
+    state.popupWidth = data.popupWidth;
     state.showMenuTitles = data.showMenuTitles;
     state.showMenuServices = data.showMenuServices;
     state.showMenuGroups = data.showMenuGroups;
@@ -793,11 +849,13 @@ chrome.storage.sync.get(
     state.recentPerAccount = data.recentPerAccount;
     state.dashboardTitleFormat = data.dashboardTitleFormat;
     state.dashboardOpenLinks = data.dashboardOpenLinks;
+    for (const key of Object.keys(GMAIL_DEFAULTS)) state[key] = data[key];
     state.popupSections = { ...state.popupSections, ...data.popupSections };
     state.popupOrder = popupOrder(data.popupOrder);
     state.searchButtons = { ...state.searchButtons, ...data.searchButtons };
     state.dashboardSections = dashboardSections(data.dashboardSections);
     state.accountLabels = data.accountLabels;
+    state.hiddenAccounts = data.hiddenAccounts;
     state.accountOrder = data.accountOrder;
     state.groups = data.groups
       ? reconcileGroups(data.groups.map(g => ({ id: g.id || newGroupId(), label: g.label, hosts: [...g.hosts] })))
@@ -823,12 +881,14 @@ chrome.storage.sync.get(
     document.getElementById('popup-placement').value = state.popupPlacement;
     document.getElementById('popup-size').value = state.popupSize;
     document.getElementById('show-popup-title').checked = state.showPopupTitle;
+    document.getElementById('popup-width').value = state.popupWidth;
     document.getElementById('show-menu-titles').checked = state.showMenuTitles;
     document.getElementById('show-menu-groups').checked = state.showMenuGroups;
     document.getElementById('keyboard-nav').checked = state.keyboardNav;
     document.getElementById('dashboard-columns').value = state.dashboardColumns;
     document.getElementById('recent-per-account').value = state.recentPerAccount;
     document.getElementById('dashboard-open-links').value = state.dashboardOpenLinks;
+    renderGmailSettings();
     titleMode = titleModeOf(state.dashboardTitleFormat);
     if (titleMode !== 'preset') titleInput.value = state.dashboardTitleFormat.replace(/^text:/, '');
     renderTitleFormat();
@@ -842,6 +902,7 @@ chrome.storage.sync.get(
       const list = detected.length ? detected : Array.from({ length: data.manualAccountCount }, (_, index) => ({ index }));
       state.accounts = orderAccounts(list, data.accountOrder);
       renderDashboardAccounts();
+      renderToolbarBadgeOptions();
     });
 
     render();

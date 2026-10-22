@@ -156,7 +156,8 @@ async function optionsColumns(count) {
       const edges = (e) => { const r = e.getBoundingClientRect(); return [r.top + scrollY, r.bottom + scrollY]; };
       return [...edges(el), [...el.querySelectorAll('tbody tr')].map(edges)];
     })`))
-    .map(([top, bottom, rows]) => ({ top, bottom, rows, torn: bottom - top > TEAR_OVER }));
+    // Only tables can be torn (between rows); other tall cards show whole
+    .map(([top, bottom, rows]) => ({ top, bottom, rows, torn: bottom - top > TEAR_OVER && rows.length > 0 }));
   const shown = (b) => (b.torn ? TEAR_HEAD + TEAR_TAIL + TEAR_GAP : b.bottom - b.top);
 
   // Brute-force the split points; the page has only a handful of blocks
@@ -227,7 +228,7 @@ try {
     region: `({ x: 0, y: 0, width: ${width}, height: Math.min(Math.ceil(document.body.getBoundingClientRect().height), 600) })`,
   });
   captures.set('/_capture/popup-accounts.png', await popupView('accounts', 380));
-  captures.set('/_capture/popup-account-launcher.png', await popupView('accounts', 380,
+  captures.set('/_capture/popup-account-launcher.png', await popupView('launcher', 380,
     `document.querySelector('.dashboard-frame').contentDocument.querySelectorAll('[data-launcher]')[1].click()`));
   captures.set('/_capture/popup-sections.png', await popupView('sections', 380));
   await output('images/popup.png', await capture('/scripts/images/popup-views.html', { width: 1660, height: 750, settle: 800 }));

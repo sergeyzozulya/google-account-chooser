@@ -13,8 +13,27 @@
   ];
   const unread = { 0: 4, 1: 23, 2: 0 };
 
+  // Newest unread emails per account, as Gmail's Atom feed lists them: [sender, subject, text, minutes ago]
+  const emails = {
+    0: [
+      ['Maria Santos', 'Lisbon in May?', 'Found a flat near Alfama for the second week — sending the link so you can have a look before it goes.', 25],
+      ['Book Club', 'Next pick: The Overstory', 'We meet on the 3rd at Sam’s. Bring snacks and your favourite passage to read aloud.', 190],
+      ['Home Insurance', 'Your renewal documents', 'Your policy renews on 1 November. Review the attached documents and let us know of any changes.', 1500],
+    ],
+    1: [
+      ['Priya Nair', 'Q4 budget — final numbers', 'Updated the forecast tab with the October actuals. Can you sign off before Thursday’s review?', 8],
+      ['Jordan Lee', 'Roadmap review moved to 3pm', 'Clashes with the board prep, so pushed it an hour. Same room, agenda unchanged.', 47],
+      ['Northwind IT', 'Scheduled maintenance this weekend', 'VPN and the wiki will be unavailable on Saturday from 22:00 to 02:00.', 320],
+    ],
+  };
+  const feed = (slot) => `<feed><title>Gmail - Inbox for ${accounts[slot]?.email}</title><fullcount>${unread[slot] ?? 0}</fullcount>${
+    (emails[slot] || []).map(([from, subject, text, ago], i) => `<entry><title>${subject}</title><summary>${text}</summary>`
+      + `<link href="https://mail.google.com/mail?account_id=x&amp;message_id=18f${slot}${i}a&amp;view=conv"/>`
+      + `<issued>${new Date(now - ago * min).toISOString()}</issued><author><name>${from}</name></author></entry>`).join('')}</feed>`;
+
   const stored = {
     sync: {
+      mailListCount: '3',
       accountLabels: {
         'alex.rivera@gmail.com': 'Personal',
         'alex@northwind.example': 'Northwind',
@@ -30,12 +49,14 @@
     },
   };
 
-  // Popup layouts for the popup screenshot, chosen with ?view= on popup.html
+  // Popup layouts for the popup screenshot, chosen with ?view= on popup.html (and seen by its dashboard frames)
   const POPUP_VIEWS = {
     accounts: { showMenuServices: false, popupSections: { accounts: true }, popupOrder: ['accounts'] },
+    // Mail lists folded, so the per-account launcher fits
+    launcher: { showMenuServices: false, popupSections: { accounts: true }, popupOrder: ['accounts'], expandUnread: 'dashboard' },
     sections: { showMenuServices: false, popupSections: { search: true, accounts: true, tabs: true }, popupOrder: ['search', 'accounts', 'tabs'] },
   };
-  Object.assign(stored.sync, POPUP_VIEWS[new URLSearchParams(location.search).get('view')]);
+  Object.assign(stored.sync, POPUP_VIEWS[new URLSearchParams((window.parent || window).location.search).get('view')]);
 
   const tabs = [
     { id: 1, windowId: 1, url: 'https://mail.google.com/mail/u/1/#inbox', title: 'Inbox (23) - alex@northwind.example - Northwind Mail' },
@@ -100,7 +121,12 @@
 
   window.chrome = {
     storage: { sync: area('sync'), local: area('local'), onChanged: event },
-    runtime: { openOptionsPage: noop, sendMessage: () => Promise.resolve(), getURL: (p) => p },
+    // The dashboard reads Gmail feeds through the background worker
+    runtime: {
+      openOptionsPage: noop,
+      getURL: (p) => p,
+      sendMessage: (msg) => Promise.resolve(msg?.type === 'feed' && msg.n in unread ? { status: 200, text: feed(msg.n) } : undefined),
+    },
     tabs: { create: () => Promise.resolve(), update: noop, query: () => Promise.resolve(tabs), onCreated: event, onRemoved: event, onUpdated: event },
     windows: { update: noop },
     permissions: { contains: () => Promise.resolve(true), request: () => Promise.resolve(true), remove: () => Promise.resolve() },
@@ -111,11 +137,6 @@
     },
   };
 
-  // Gmail feeds give the fictional unread counts; Google's account list "fails",
-  // so the dashboard keeps the accounts above
-  window.fetch = async (url) => {
-    const slot = String(url).match(/\/mail\/u\/(\d+)\/feed\/atom/)?.[1];
-    if (slot === undefined) return { ok: false, text: async () => '' };
-    return { ok: true, text: async () => `<feed><title>Gmail - Inbox</title><fullcount>${unread[slot] ?? 0}</fullcount></feed>` };
-  };
+  // Google's account list "fails", so the dashboard keeps the accounts above
+  window.fetch = async () => ({ ok: false, text: async () => '' });
 })();
