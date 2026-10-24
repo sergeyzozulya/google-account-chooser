@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Regenerates every image from images/icon.svg and the extension pages:
-//   src/icons/icon{16,32,48}.png, src/icons/icon.png, images/icon.png
-//   images/popup.png (popup views), images/options.png (Settings in columns), images/dashboard.png
-//   images/screen1.png … screen3.png                    (store screenshots, 1280×800; also src/screens/ for What's new)
-//   images/marque.png, images/small.png                (store promo tiles)
+// Regenerates every image from media/icon.svg and the extension pages:
+//   src/icons/icon{16,32,48}.png, src/icons/icon.png, media/icon.png
+//   media/popup.png (popup views), media/options.png (Settings in columns), media/dashboard.png
+//   media/screen1.png … screen3.png                    (store screenshots, 1280×800; also src/screens/ for What's new)
+//   media/marque.png, media/small.png                (store promo tiles)
 //
 // Usage: node scripts/build-images.mjs
 // Needs Google Chrome (override the path with CHROME=...) and network access for the promo fonts.
@@ -201,7 +201,7 @@ async function output(file, png) {
 try {
   console.log('Icons');
   for (const [size, files] of [[16, ['src/icons/icon16.png']], [32, ['src/icons/icon32.png']], [48, ['src/icons/icon48.png']],
-                               [128, ['src/icons/icon.png', 'images/icon.png']]]) {
+                               [128, ['src/icons/icon.png', 'media/icon.png']]]) {
     const png = await capture('/scripts/images/icon.html', { width: size, height: size, transparent: true });
     for (const file of files) await output(file, png);
   }
@@ -218,11 +218,11 @@ try {
   const dashboard = await capture('/src/dashboard.html', { width: 1280, height: 640, scale: 2, settle: 1500 });
   captures.set('/_capture/dashboard.png', dashboard);
   // Whole dashboard page; a short viewport so the page height is its content, not the window
-  await output('images/dashboard.png', await capture('/src/dashboard.html', { width: 1280, height: 400, fullHeight: true, settle: 1500 }));
+  await output('media/dashboard.png', await capture('/src/dashboard.html', { width: 1280, height: 400, fullHeight: true, settle: 1500 }));
   captures.set('/_capture/popup.png', popup);
   captures.set('/_capture/options.png', options);
   captures.set('/_capture/services.png', services);
-  // Popup views for images/popup.png, cropped at Chrome's 600px popup height
+  // Popup views for media/popup.png, cropped at Chrome's 600px popup height
   const popupView = (view, width, prepare) => capture(`/src/popup.html?view=${view}`, {
     width, height: 600, scale: 2, settle: 1500, prepare,
     region: `({ x: 0, y: 0, width: ${width}, height: Math.min(Math.ceil(document.body.getBoundingClientRect().height), 600) })`,
@@ -231,7 +231,7 @@ try {
   captures.set('/_capture/popup-account-launcher.png', await popupView('launcher', 380,
     `document.querySelector('.dashboard-frame').contentDocument.querySelectorAll('[data-launcher]')[1].click()`));
   captures.set('/_capture/popup-sections.png', await popupView('sections', 380));
-  await output('images/popup.png', await capture('/scripts/images/popup-views.html', { width: 1660, height: 750, settle: 800 }));
+  await output('media/popup.png', await capture('/scripts/images/popup-views.html', { width: 1660, height: 750, settle: 800 }));
   const columns = await optionsColumns(3);
   const layout = columns.map((segments, c) => segments.map((seg, k) => {
     const src = `/_capture/options-${c}-${k}.png`;
@@ -239,12 +239,12 @@ try {
     return { src, torn: seg.torn };
   }));
   captures.set('/_capture/options-columns.json', Buffer.from(JSON.stringify(layout)));
-  await output('images/options.png', await capture('/scripts/images/options-columns.html', { width: 2550, height: 100, fullHeight: true, settle: 1000 }));
+  await output('media/options.png', await capture('/scripts/images/options-columns.html', { width: 2550, height: 100, fullHeight: true, settle: 1000 }));
 
   console.log('Store images');
   for (const [name, width, height] of [['screen1', 1280, 800], ['screen2', 1280, 800], ['screen3', 1280, 800], ['marque', 1400, 560], ['small', 440, 280]]) {
     const png = await capture(`/scripts/images/${name}.html`, { width, height });
-    await output(`images/${name}.png`, png);
+    await output(`media/${name}.png`, png);
     if (name.startsWith('screen')) await output(`src/screens/${name}.png`, png);
   }
 } finally {

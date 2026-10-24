@@ -77,7 +77,7 @@ Creates `dist/google-account-chooser-<version>.zip` from `src/`, using the versi
 
 ### Images
 
-Icons, UI screenshots and Chrome Web Store images are generated from `images/icon.svg`, the extension pages, and the templates in `scripts/images/`:
+Icons, UI screenshots and Chrome Web Store images are generated from `media/icon.svg`, the extension pages, and the templates in `scripts/images/`:
 
 ```
 node scripts/build-images.mjs
