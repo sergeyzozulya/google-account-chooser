@@ -5,48 +5,54 @@ A Chrome extension that automatically routes Google service links through [Accou
 ## Features
 
 **Account Chooser for Google links**
-- Intercepts navigation to 26 Google services and redirects through Account Chooser
+- Intercepts navigation to 35 Google services and redirects through Account Chooser
 - **Intercept Google links** switch (Options → General) pauses all interception without changing per-service settings
-- Per-service **Intercept** toggle
+- Per-service **Intercept** toggle (Options → Services)
 - Per-service **Skip** toggle — skips Account Chooser when the URL already specifies an account (`authuser=` or `/u/N/`)
-- Per-service **Window** toggle — opens the service in a separate chromeless window; placement (Center, Tiles, Custom) and size (Default, Large, Full screen, Custom) are set in Options → Window
+- Per-service **Window** toggle — opens the service in a separate chromeless window; placement (Center, Tiles, Custom) and size (Default, Large, Full screen, Custom) are set in Options → Services → Window
 
 **Dashboard**
-- One card per signed-in account: photo, email or nickname, Gmail unread count, and a launcher that opens any service directly in that account (no Account Chooser)
-- Chrome-style bookmarks bar: bar items, nested folder menus, » overflow and Other bookmarks; opens in the same tab (Ctrl/⌘-click for a new tab)
+- All signed-in accounts on one panel: photo, email or nickname, Gmail unread count and unread emails, and a launcher that opens any service directly in that account (no Account Chooser); side by side when the section is full width, one per row otherwise
+- Chrome-style bookmarks bar: bar items, nested folder menus, » overflow and Other bookmarks; narrower than full width, a list whose folders open in place
 - Search Google (default on Enter), or Gmail and Drive in a chosen account via split buttons
-- Open Google tabs and recent Docs/Sheets/Slides/Forms (from browser history), grouped by account
+- Open tabs: all tabs or only Google services, grouped by window (installed web apps under their own name), by account or not at all, with close buttons and Chrome tab group colors
+- Recent Docs/Sheets/Slides/Forms from browser history, grouped by account or type, filtered by type and period, sorted by last opened or most visited
 - Statistics of the services and accounts you open through the extension
 - Bookmarks and Recent files need an extra permission, granted with **Turn on** in the section; nothing is requested at install
-- Accounts are detected from your Google session (falling back to Gmail feeds, then a manual count), cached, and refreshed in the background
+- Accounts are detected from your Google session (falling back to Gmail feeds, then a manual count), cached, and refreshed in the background; the dashboard also refreshes when its tab is selected or its window focused
 - Optionally replaces Chrome's New Tab page (Options → General), with an editable tab title
 
 **Popup and side panel**
 - The toolbar button opens a popup (default) or the same content in Chrome's side panel, which stays open (Options → General)
-- **Show in popup** (Options → Popup): the launcher and any dashboard section except Bookmarks, on or off and in any order
+- Options → Popup → **Sections**: the launcher and any dashboard section except Bookmarks, on or off and in any order; **Layout**: all expanded, or an accordion with one section open at a time
+- Arrow keys move through everything: the header buttons, the launcher and every section
 - The popup title is the dashboard title
-- A badge on the toolbar icon shows the total Gmail unread count across accounts, refreshed every 2 minutes
+- A badge on the toolbar icon shows the Gmail unread count across accounts or for one account, refreshed as often as Options → Gmail → Check mail every
 
 **Launcher**
 - Per-service **Launcher** toggle — which services the launcher shows (in the popup and in each dashboard account)
-- Options → Launcher: group separators, names below icons, keyboard navigation (arrow keys, Home/End)
+- Options → Launcher: group separators and names below icons; arrow keys and Home/End move between services
 - Groups: add, rename, delete; drag and drop groups and services, including between groups
 - Column toggles on group rows flip Intercept / Window / Skip / Launcher for the whole group (indeterminate when mixed)
 
-**Customization (Options → Dashboard)**
-- Accounts: order (drag and drop), nicknames, accounts per row
-- Sections: order (drag and drop), width, visibility and title for each section
-- Title: date-and-time presets, static text, or a custom format
-- Which search buttons appear, and how many recent files to show per account
+**Customization**
+- Options → General → Accounts: order (drag and drop), nicknames, and which accounts show
+- Options → Interface → Dashboard: section order (drag and drop), width, visibility and title; header title (date-and-time presets, static text or a custom format); where links and new tabs open; placement, size and section height
+- Options → Interface → Search: which search buttons show
+- Options → Interface → Popup, Gmail, Open tabs, Recent files and Launcher: the options above
 
 ## Supported Services
 
 | Group | Services |
 |---|---|
-| Workspace | Gmail, Chat, Meet, Calendar, Drive, Docs, Sheets, Slides, Forms, Keep, Contacts, Sites, Groups |
-| Personal | Gemini, Photos, Voice, Play, Maps, Classroom |
-| Account & Storage | My Account, One, Admin |
-| Developer & Business | Analytics, Ads, Looker Studio, Colab |
+| Connect | Gmail, Chat, Meet, Calendar, Contacts, Groups, Voice |
+| Create | Docs, Sheets, Slides, Forms, Sites, Keep, Tasks |
+| Access | Drive, Photos, One |
+| AI | Gemini, NotebookLM |
+| Everyday | Maps, Play, Classroom |
+| Marketing & Business | Analytics, Ads, Tag Manager, Search Console, Looker Studio, Merchant Center, Business Profile, AdSense |
+| Developer | Cloud Console, Firebase, Colab |
+| Control | My Account, Admin |
 
 ## Installation
 
@@ -116,13 +122,14 @@ Everything runs in your browser. The extension doesn't ask you to sign in and do
 
 | Permission | Used for |
 |---|---|
-| `webNavigation`, `tabs` | Routing Google links through Account Chooser; listing open Google tabs |
+| `webNavigation`, `tabs` | Routing Google links through Account Chooser; listing open tabs |
+| `tabGroups` | Marking open tabs with the color of their Chrome tab group |
 | `storage` | Settings, account cache, statistics |
 | `alarms` | Refreshing the unread badge |
 | `declarativeNetRequestWithHostAccess` | Removing the extension's Origin header from Google's account-list request, which Google otherwise rejects |
 | `sidePanel` | Showing the popup in Chrome's side panel |
 | `history`, `bookmarks`, `favicon` (optional) | Recent files and the bookmarks bar, requested only when you turn them on |
-| Host permissions (Google service domains) | Intercepting their links, reading the Gmail unread feed and the account list |
+| Host permissions (`accounts.google.com`, `mail.google.com`) | Reading the account list, the Gmail unread feed and email threads |
 
 ## License
 

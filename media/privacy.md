@@ -14,7 +14,11 @@ The webNavigation permission is used to detect when the user is about to navigat
 
 ### tabs
 
-Used to restore or close the original tab when a service opens in a separate window, to open services and dashboard links in new tabs, to list the user's open Google service tabs on the dashboard (grouped by account) and switch to them, and to show the dashboard in new tabs if the user enables that option. Tab data is only displayed locally; nothing is transmitted or stored remotely.
+Used to restore or close the original tab when a service opens in a separate window, to open services and dashboard links in new tabs, to list the user's open tabs on the dashboard (by window or by account, all tabs or only Google services) and switch to them, and to show the dashboard in new tabs if the user enables that option. Tab data is only displayed locally; nothing is transmitted or stored remotely.
+
+### tabGroups
+
+Used to mark the user's open tabs on the dashboard with the color and name of the Chrome tab group they belong to (Options → Open tabs → Tab groups). Read locally, never transmitted.
 
 ### storage
 
@@ -46,7 +50,7 @@ Optional, requested together with bookmarks to show each bookmark's site icon fr
 
 ### Host permission
 
-Needed for the Google service domains listed in the manifest to (1) detect navigation to them and route it through accounts.google.com/AccountChooser, (2) read each signed-in account's unread Gmail messages and count from mail.google.com/mail/u/N/feed/atom, (3) show an email thread the user clicks from mail.google.com/mail/u/N/?view=pt, and (4) read the list of signed-in accounts (name, email, photo) from accounts.google.com/ListAccounts. These requests use the user's existing Google session, run in the browser, and their results are only shown locally.
+Requested only for accounts.google.com and mail.google.com, to (1) read each signed-in account's unread Gmail messages and count from mail.google.com/mail/u/N/feed/atom, (2) show an email thread the user clicks from mail.google.com/mail/u/N/?view=pt, and (3) read the list of signed-in accounts (name, email, photo) from accounts.google.com/ListAccounts. Routing links through Account Chooser needs no host access; it uses webNavigation and tabs. These requests use the user's existing Google session, run in the browser, and their results are only shown locally.
 
 ### Are you using remote code?
 

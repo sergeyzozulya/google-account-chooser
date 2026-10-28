@@ -146,11 +146,15 @@ async function capture(url, { width, height, scale = 1, transparent = false, ful
 // take the most even one, so no column is left nearly empty. Cards taller than TEAR_OVER
 // (the services table) show their top and bottom with a torn-paper gap in between.
 // Returns columns as lists of { png, torn } segments; `torn` means a tear follows it.
+// Options' tabs (General, Interface, Services) all showing, one after another, without the tab bar
+const ALL_OPTION_TABS = `(document.querySelectorAll('.tab-panel').forEach(p => { p.hidden = false; }),
+  document.querySelector('.tabs').hidden = true)`;
+
 async function optionsColumns(count) {
   const width = 802, pad = 24, TEAR_OVER = 900, TEAR_HEAD = 560, TEAR_TAIL = 190, TEAR_GAP = 28;
-  await capture('/src/options.html', { width, height: 900 });
-  // Each block with its table-row edges, so tears fall between rows
-  const blocks = (await evaluate(`[...document.querySelector('.page').children]
+  await capture('/src/options.html', { width, height: 900, prepare: ALL_OPTION_TABS });
+  // Each block (the header, the subtitle and every card) with its table-row edges, so tears fall between rows
+  const blocks = (await evaluate(`[...document.querySelectorAll('.page > :not(.tab-panel), .tab-panel > *')]
     .filter(el => el.offsetHeight && getComputedStyle(el).position !== 'fixed')
     .map(el => {
       const edges = (e) => { const r = e.getBoundingClientRect(); return [r.top + scrollY, r.bottom + scrollY]; };
@@ -173,7 +177,7 @@ async function optionsColumns(count) {
   const best = options.filter(o => o.tallest <= shortest * 1.1).sort((a, b) => a.spread - b.spread)[0];
 
   const shot = (top, bottom) => capture('/src/options.html', {
-    width, height: 900, scale: 2, region: `({ x: 0, y: ${top}, width: ${width}, height: ${bottom - top} })`,
+    width, height: 900, scale: 2, prepare: ALL_OPTION_TABS, region: `({ x: 0, y: ${top}, width: ${width}, height: ${bottom - top} })`,
   });
   const columns = [];
   for (const group of best.groups) {
@@ -209,8 +213,10 @@ try {
   console.log('UI screenshots');
   const popup = await capture('/src/popup.html', { width: 300, height: 600, scale: 2, fullHeight: true });
   const options = await capture('/src/options.html', { width: 802, height: 900, scale: 2, fullHeight: true });
+  // The Services tab, opened by its button: a #services link right after options.html is a same-page
+  // navigation, which fires no load event
   const services = await capture('/src/options.html', {
-    width: 802, height: 900, scale: 2,
+    width: 802, height: 900, scale: 2, prepare: `document.querySelector('[data-tab="services"]').click()`,
     region: `(() => { const r = document.querySelector('.services-card').getBoundingClientRect();
                       return { x: r.left, y: r.top + scrollY, width: r.width, height: Math.min(r.height, 480) }; })()`,
   });

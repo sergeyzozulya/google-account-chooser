@@ -1,5 +1,41 @@
 # Changelog
 
+## [2.2.0] — 2026-10-28
+
+### Added
+- **Options → Open tabs**: list all tabs (the default) or only Google service tabs, Grouping (by window, the default, with installed web apps under their own name; by account, with other sites under Other tabs; or none), Close buttons (× on a tab's row), and Tab groups (a strip in the color of the tab's Chrome tab group)
+- **Options → Recent files**: Files listed (per account or type; replaces Options → Dashboard → Recent files per account), Grouping (by account, the default; by type; or none), File types (Docs, Sheets, Slides, Forms), Period (1, 7, 30 or 90 days) and Sort (last opened or most visited)
+- **Layout** (Options → Popup): dashboard sections in the popup all expanded (default) or as an accordion, one open at a time (the first when the popup opens), the others folded to their title
+- **Placement** (Top or Center) and **Size** (Full width, or at most 1600, 1200 or 960 px wide) (Options → Dashboard)
+- **Section height** (Options → Dashboard): how tall Open tabs, Recent files and Statistics grow before they scroll, Auto or 240 to 600 px (default 420)
+- **New tabs open** (Options → Dashboard): next to the dashboard (default) or at the end of the window
+- Services: Tasks, NotebookLM, Search Console, Tag Manager, Merchant Center, Business Profile, AdSense, Cloud Console, Firebase
+- Permission (no install warning): `tabGroups`, for Tab groups
+
+### Changed
+- Default service groups follow Google Workspace's Connect / Create / Access / Control: Connect, Create, Access, AI, Everyday, Marketing & Business, Developer, Control (saved groups are kept; new services join the last one)
+- Host permissions narrowed to `accounts.google.com` and `mail.google.com`, the only sites the extension reads from; routing links through Account Chooser doesn't need them
+- Arrow keys move through the whole popup, always: the header buttons, the launcher and every dashboard section (search, accounts, tabs, files, accordion titles; not Clear and Reset); the Keyboard navigation setting is gone
+- Options are split into tabs: General (General, Accounts), Interface (Dashboard, Popup, Search, Gmail, Open tabs, Recent files, Launcher) and Services (Services, Window)
+- Accounts (order, nicknames, switches) have their own card under General
+- Recent files whose links never named an account are listed under the default (first) account instead of Account not known; opening them still goes through Account Chooser
+- The toolbar badge skips its mail check while an open dashboard or popup has just checked
+- The dashboard refreshes accounts, mail, open tabs and recent files when its tab is selected or its window focused
+- Search is a panel with an optional Search title (Options → Dashboard → Sections → Title); in the popup's accordion it folds like the other sections; its search buttons moved from Options → Dashboard to their own Options → Search card; with no search buttons it stays, and Enter searches Google
+- Accounts share one panel, divided by lines, with an optional Accounts title (Options → Dashboard → Sections → Title); they sit in one row when the section is full width and in one column otherwise, and the Accounts per row setting is gone
+- Bookmarks narrower than full width show as a list whose folders open in place
+- With accounts in a column (section narrower than full width), an account's launcher expands inside its card instead of floating
+- Options → Popup → Show in popup is now **Sections**, at the top of the card
+- Sections in the popup and side panel show in full, the popup scrolling as a whole, instead of each scrolling at a fixed height
+- Keyboard focus shows as a hover background, like in the launcher, on the dashboard and in the popup
+
+### Fixed
+- The launcher left out services added since the service groups were last saved
+- One account could show as two groups in Open tabs and Recent files when Google named it by number in some links and by email in others
+- Gmail feeds were fetched twice when the popup's sections and the toolbar badge checked at the same time
+
+---
+
 ## [2.1.0] — 2026-10-22
 
 ### Added

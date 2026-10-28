@@ -17,6 +17,7 @@ const SERVICE_DEFS = {
   'slides.google.com':         { label: 'Slides',       icon: _icon('slides.webp')       },
   'forms.google.com':          { label: 'Forms',        icon: _icon('forms.webp')        },
   'keep.google.com':           { label: 'Keep',         icon: _icon('keep.webp')         },
+  'tasks.google.com':          { label: 'Tasks',        icon: _icon('tasks.webp')        },
   'contacts.google.com':       { label: 'Contacts',     icon: _icon('contacts.png')      },
   'classroom.google.com':      { label: 'Classroom',    icon: _icon('classroom.svg')     },
   'sites.google.com':          { label: 'Sites',        icon: _icon('sites.webp')        },
@@ -30,47 +31,80 @@ const SERVICE_DEFS = {
   'ads.google.com':            { label: 'Ads',          icon: _icon('ads.webp')          },
   'lookerstudio.google.com':   { label: 'Looker Studio',icon: _icon('lookerstudio.webp') },
   'colab.research.google.com': { label: 'Colab',        icon: _icon('colab.svg')         },
+  'search.google.com':         { label: 'Search Console', icon: _icon('searchconsole.webp') },
+  'tagmanager.google.com':     { label: 'Tag Manager',  icon: _icon('tagmanager.webp')   },
+  'merchants.google.com':      { label: 'Merchant Center', icon: _icon('merchants.webp') },
+  'business.google.com':       { label: 'Business Profile', icon: _icon('business.webp') },
+  'adsense.google.com':        { label: 'AdSense',      icon: _icon('adsense.webp')      },
+  'console.cloud.google.com':  { label: 'Cloud Console',icon: _icon('cloud.webp')        },
+  'console.firebase.google.com': { label: 'Firebase',   icon: _icon('firebase.webp')     },
   'maps.google.com':           { label: 'Maps',         icon: _icon('maps.webp')         },
   'gemini.google.com':         { label: 'Gemini',       icon: _icon('gemini.svg')        },
+  'notebooklm.google.com':     { label: 'NotebookLM',   icon: _icon('notebooklm.webp')   },
   'myaccount.google.com':      { label: 'My Account',   icon: _icon('google.webp')       },
 };
 
+// Default groups, after Google Workspace's Connect / Create / Access / Control
 const SERVICE_GROUPS = [
   {
-    id: 'workspace',
-    label: 'Workspace',
+    id: 'connect',
+    label: 'Connect',
     hosts: [
       'mail.google.com', 'chat.google.com', 'meet.google.com', 'calendar.google.com',
-      'drive.google.com', 'docs.google.com', 'sheets.google.com',
-      'slides.google.com', 'forms.google.com',
-      'keep.google.com', 'contacts.google.com',
-      'sites.google.com', 'groups.google.com',
+      'contacts.google.com', 'groups.google.com', 'voice.google.com',
     ],
   },
   {
-    id: 'personal',
-    label: 'Personal',
+    id: 'create',
+    label: 'Create',
     hosts: [
-      'gemini.google.com', 'photos.google.com', 'voice.google.com', 'play.google.com',
-      'maps.google.com', 'classroom.google.com',
+      'docs.google.com', 'sheets.google.com', 'slides.google.com', 'forms.google.com',
+      'sites.google.com', 'keep.google.com', 'tasks.google.com',
     ],
   },
   {
-    id: 'account-storage',
-    label: 'Account & Storage',
+    id: 'access',
+    label: 'Access',
+    hosts: ['drive.google.com', 'photos.google.com', 'one.google.com'],
+  },
+  {
+    id: 'ai',
+    label: 'AI',
+    hosts: ['gemini.google.com', 'notebooklm.google.com'],
+  },
+  {
+    id: 'everyday',
+    label: 'Everyday',
+    hosts: ['maps.google.com', 'play.google.com', 'classroom.google.com'],
+  },
+  {
+    id: 'marketing-business',
+    label: 'Marketing & Business',
     hosts: [
-      'myaccount.google.com', 'one.google.com', 'admin.google.com',
+      'analytics.google.com', 'ads.google.com', 'tagmanager.google.com', 'search.google.com',
+      'lookerstudio.google.com', 'merchants.google.com', 'business.google.com', 'adsense.google.com',
     ],
   },
   {
-    id: 'developer-business',
-    label: 'Developer & Business',
-    hosts: [
-      'analytics.google.com', 'ads.google.com',
-      'lookerstudio.google.com', 'colab.research.google.com',
-    ],
+    id: 'developer',
+    label: 'Developer',
+    hosts: ['console.cloud.google.com', 'console.firebase.google.com', 'colab.research.google.com'],
+  },
+  {
+    id: 'control',
+    label: 'Control',
+    hosts: ['myaccount.google.com', 'admin.google.com'],
   },
 ];
+
+// Ensure every host in SERVICE_DEFS is covered by some group; any uncovered hosts (services added
+// since the groups were saved) are appended to the last group.
+function reconcileGroups(groups) {
+  const covered = new Set(groups.flatMap(g => g.hosts));
+  const uncovered = Object.keys(SERVICE_DEFS).filter(h => !covered.has(h));
+  if (uncovered.length > 0) groups[groups.length - 1].hosts.push(...uncovered);
+  return groups;
+}
 
 // Account index or email named by a URL's /u/N/ path or authuser= param, or null
 function accountFromUrl(url) {
@@ -83,7 +117,7 @@ function accountFromUrl(url) {
   }
 }
 
-// Services whose account-specific URL uses a /u/N/ path; the rest get ?authuser=N
+// Services whose account-specific URL uses a /u/N/ path or a page other than the root; the rest get ?authuser=N
 const ACCOUNT_URLS = {
   'mail.google.com':      n => `https://mail.google.com/mail/u/${n}/`,
   'calendar.google.com':  n => `https://calendar.google.com/calendar/u/${n}/r`,
@@ -95,6 +129,7 @@ const ACCOUNT_URLS = {
   'keep.google.com':      n => `https://keep.google.com/u/${n}/`,
   'photos.google.com':    n => `https://photos.google.com/u/${n}/`,
   'myaccount.google.com': n => `https://myaccount.google.com/u/${n}/`,
+  'search.google.com':    n => `https://search.google.com/search-console?authuser=${n}`,
 };
 
 function accountServiceUrl(host, n) {
@@ -112,6 +147,22 @@ const GMAIL_DEFAULTS = {
   threadOpen: 'last',      // messages open when a thread shows: 'last' or 'all'
   mailCheckMinutes: 2,     // how often unread mail is checked
   toolbarBadge: 'all',     // toolbar icon count: 'off', 'all', or one account's accountKey
+};
+
+// Options → Open tabs and Options → Recent files
+const PANEL_DEFAULTS = {
+  tabsScope: 'all',        // tabs listed: 'all' or only 'google' services
+  tabsGroupBy: 'window',   // tabs listed under each 'window' or 'account', or in one list ('none')
+  tabsClose: true,         // × on each tab row closes the tab
+  tabsGroupColors: true,   // a strip in the color of the tab's Chrome tab group
+  recentPerAccount: 5,     // files listed per group, or in all when not grouped
+  recentGroupBy: 'account', // files listed under each 'account' or 'type', or in one list ('none')
+  recentDocs: true,        // file types listed
+  recentSheets: true,
+  recentSlides: true,
+  recentForms: true,
+  recentDays: 30,          // files opened in the last 1, 7, 30 or 90 days
+  recentSort: 'recent',    // 'recent' (last opened first) or 'visits' (most visited first)
 };
 
 // Dashboard sections in default order; width is a share of the page row

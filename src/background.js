@@ -179,13 +179,23 @@ const MAX_ACCOUNTS = 10;
 // A slot whose session has lapsed answers 401 with a Basic-auth challenge: fetched from a page,
 // Chrome asks for a username and password; from this worker, which has no page to ask on, the
 // request just fails. So the dashboard reads feeds through here too.
-async function fetchFeed(n) {
-  try {
-    const res = await fetch(`https://mail.google.com/mail/u/${n}/feed/atom`, { credentials: 'include' });
-    return { status: res.status, text: res.ok ? await res.text() : null };
-  } catch {
-    return null;
-  }
+// A feed still loading is shared with whoever asks for it meanwhile (the popup's frames ask at once).
+const pendingFeeds = new Map(); // n → the fetch's promise
+
+function fetchFeed(n) {
+  if (pendingFeeds.has(n)) return pendingFeeds.get(n);
+  const result = (async () => {
+    try {
+      const res = await fetch(`https://mail.google.com/mail/u/${n}/feed/atom`, { credentials: 'include', cache: 'no-store' });
+      return { status: res.status, text: res.ok ? await res.text() : null };
+    } catch {
+      return null;
+    } finally {
+      pendingFeeds.delete(n);
+    }
+  })();
+  pendingFeeds.set(n, result);
+  return result;
 }
 
 // Unread count and the account's email for account slot n, or null
@@ -250,8 +260,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.mailCheckMinutes) scheduleUnread();
   if (changes.toolbarBadge || changes.hiddenAccounts) refreshUnread();
 });
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === UNREAD_ALARM) refreshUnread();
+// While a dashboard or popup is open it checks mail itself and sends the counts (below), so the
+// alarm skips a check that one did within the period (less a few seconds, as timers drift)
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== UNREAD_ALARM) return;
+  const { unreadSentAt = 0 } = await chrome.storage.session.get('unreadSentAt');
+  if (Date.now() - unreadSentAt < alarm.periodInMinutes * 60000 - 10000) return;
+  refreshUnread();
 });
 chrome.runtime.onStartup.addListener(refreshUnread);
 
@@ -281,7 +296,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   // The dashboard sends fresh unread counts after each refresh
-  if (msg.type === 'unread') showUnread(msg.unread);
+  if (msg.type === 'unread') {
+    showUnread(msg.unread);
+    chrome.storage.session.set({ unreadSentAt: Date.now() });
+  }
   if (msg.type === 'open') {
     openWithAccount(msg.url, msg.tabId);
     recordLaunch(msg.service, accountFromUrl(msg.url));

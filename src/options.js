@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, SERVICE_GROUPS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate */
+/* global SERVICE_DEFS, SERVICE_GROUPS, reconcileGroups, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate */
 
 // Build per-service defaults from shared definitions
 const DEFAULT_SERVICES = Object.fromEntries(
@@ -17,15 +17,18 @@ let state = {
   popupSize: 'custom',
   showPopupTitle: true,
   popupWidth: 'auto',     // toolbar popup width in px as a string, or 'auto'
+  popupSectionsMode: 'expanded', // dashboard sections in the popup: 'expanded' or 'accordion'
   showMenuTitles: true,
   showMenuServices: true,
   showMenuGroups: true,
-  keyboardNav: true,
-  dashboardColumns: 'all',
-  recentPerAccount: 5,
   dashboardTitleFormat: 'auto',
   dashboardOpenLinks: 'new', // 'new', 'current' or 'pinned' (new tab only from a pinned dashboard)
+  dashboardTabPosition: 'next', // new tabs from the dashboard: 'next' to it or at the 'end'
+  dashboardSectionHeight: '420', // most a panel's list grows before scrolling, in px as a string, or 'auto'
+  dashboardPlacement: 'top', // dashboard in its tab: at the 'top' or vertically 'center'ed
+  dashboardSize: '1200',  // dashboard's widest width in px as a string, or 'full'
   ...GMAIL_DEFAULTS,      // Options → Gmail
+  ...PANEL_DEFAULTS,      // Options → Open tabs, Recent files
   popupSections: { search: false, accounts: false, tabs: false, recent: false, stats: false },
   popupOrder: [],        // launcher + dashboard section ids, in popup order
   searchButtons: { google: true, gmail: true, drive: true },
@@ -46,15 +49,6 @@ function mergeDefaults(saved) {
   return merged;
 }
 
-// Ensure every host in SERVICE_DEFS is covered by some group;
-// any uncovered hosts are appended to the last group.
-function reconcileGroups(groups) {
-  const covered = new Set(groups.flatMap(g => g.hosts));
-  const uncovered = Object.keys(SERVICE_DEFS).filter(h => !covered.has(h));
-  if (uncovered.length > 0) groups[groups.length - 1].hosts.push(...uncovered);
-  return groups;
-}
-
 function save() {
   const toSave = {};
   for (const [host, s] of Object.entries(state.services)) {
@@ -69,15 +63,17 @@ function save() {
     popupSize: state.popupSize,
     showPopupTitle: state.showPopupTitle,
     popupWidth: state.popupWidth,
+    popupSectionsMode: state.popupSectionsMode,
     showMenuTitles: state.showMenuTitles,
     showMenuServices: state.showMenuServices,
     showMenuGroups: state.showMenuGroups,
-    keyboardNav: state.keyboardNav,
-    dashboardColumns: state.dashboardColumns,
-    recentPerAccount: state.recentPerAccount,
     dashboardTitleFormat: state.dashboardTitleFormat,
     dashboardOpenLinks: state.dashboardOpenLinks,
-    ...Object.fromEntries(Object.keys(GMAIL_DEFAULTS).map(key => [key, state[key]])),
+    dashboardTabPosition: state.dashboardTabPosition,
+    dashboardSectionHeight: state.dashboardSectionHeight,
+    dashboardPlacement: state.dashboardPlacement,
+    dashboardSize: state.dashboardSize,
+    ...Object.fromEntries(Object.keys({ ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS }).map(key => [key, state[key]])),
     popupSections: state.popupSections,
     popupOrder: state.popupOrder,
     searchButtons: state.searchButtons,
@@ -520,30 +516,52 @@ titleInput.addEventListener('change', () => {
   renderTitleFormat();
 });
 
-document.getElementById('recent-per-account').addEventListener('change', (e) => {
-  state.recentPerAccount = Number(e.target.value);
-  save();
-});
-
 document.getElementById('dashboard-open-links').addEventListener('change', (e) => {
   state.dashboardOpenLinks = e.target.value;
   save();
 });
 
-// Options → Gmail: each control (data-gmail="setting") saves its setting; numbers stay numbers
-for (const el of document.querySelectorAll('[data-gmail]')) {
-  el.addEventListener('change', () => {
-    const key = el.dataset.gmail;
-    state[key] = el.type === 'checkbox' ? el.checked
-      : typeof GMAIL_DEFAULTS[key] === 'number' ? Number(el.value) : el.value;
-    save();
-  });
+document.getElementById('dashboard-tab-position').addEventListener('change', (e) => {
+  state.dashboardTabPosition = e.target.value;
+  save();
+});
+
+document.getElementById('dashboard-section-height').addEventListener('change', (e) => {
+  state.dashboardSectionHeight = e.target.value;
+  save();
+});
+
+document.getElementById('dashboard-placement').addEventListener('change', (e) => {
+  state.dashboardPlacement = e.target.value;
+  save();
+});
+
+document.getElementById('dashboard-size').addEventListener('change', (e) => {
+  state.dashboardSize = e.target.value;
+  save();
+});
+
+// Options → Gmail, Open tabs and Recent files: each control (data-gmail="setting" or
+// data-panel="setting") saves its setting; numbers stay numbers
+const SETTING_CONTROLS = [['gmail', GMAIL_DEFAULTS], ['panel', PANEL_DEFAULTS]];
+
+for (const [attr, defaults] of SETTING_CONTROLS) {
+  for (const el of document.querySelectorAll(`[data-${attr}]`)) {
+    el.addEventListener('change', () => {
+      const key = el.dataset[attr];
+      state[key] = el.type === 'checkbox' ? el.checked
+        : typeof defaults[key] === 'number' ? Number(el.value) : el.value;
+      save();
+    });
+  }
 }
 
-function renderGmailSettings() {
-  for (const el of document.querySelectorAll('[data-gmail]')) {
-    if (el.type === 'checkbox') el.checked = state[el.dataset.gmail];
-    else el.value = state[el.dataset.gmail];
+function renderSettingControls() {
+  for (const [attr] of SETTING_CONTROLS) {
+    for (const el of document.querySelectorAll(`[data-${attr}]`)) {
+      if (el.type === 'checkbox') el.checked = state[el.dataset[attr]];
+      else el.value = state[el.dataset[attr]];
+    }
   }
 }
 
@@ -559,11 +577,6 @@ function renderToolbarBadgeOptions() {
   select.value = state.toolbarBadge;
 }
 
-document.getElementById('dashboard-columns').addEventListener('change', (e) => {
-  state.dashboardColumns = e.target.value;
-  save();
-});
-
 const SECTION_WIDTHS = [['full', 'Full width'], ['two-thirds', 'Two thirds'], ['half', 'Half'], ['third', 'One third']];
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c =>
@@ -575,10 +588,9 @@ function renderDashboardSections() {
       <span class="drag-handle" draggable="true">${SVG_GRIP}</span>
       <span class="section-icon">${sectionIcon(s.id)}</span>
       <div class="label">${s.label}</div>
-      ${s.id === 'search' || s.id === 'accounts' ? '' : `
-        <label class="inline-switch" title="Show the section title">Title
-          <span class="switch"><input type="checkbox" data-field="title" ${s.title ? 'checked' : ''}><span class="slider"></span></span>
-        </label>`}
+      <label class="inline-switch" title="Show the section title">Title
+        <span class="switch"><input type="checkbox" data-field="title" ${s.title ? 'checked' : ''}><span class="slider"></span></span>
+      </label>
       <select class="select-field" data-field="width">
         ${SECTION_WIDTHS.map(([value, label]) => `<option value="${value}" ${s.width === value ? 'selected' : ''}>${label}</option>`).join('')}
       </select>
@@ -764,6 +776,11 @@ document.getElementById('popup-width').addEventListener('change', (e) => {
   save();
 });
 
+document.getElementById('popup-sections-mode').addEventListener('change', (e) => {
+  state.popupSectionsMode = e.target.value;
+  save();
+});
+
 document.getElementById('show-popup-title').addEventListener('change', (e) => {
   state.showPopupTitle = e.target.checked;
   save();
@@ -779,10 +796,6 @@ document.getElementById('show-menu-groups').addEventListener('change', (e) => {
   save();
 });
 
-document.getElementById('keyboard-nav').addEventListener('change', (e) => {
-  state.keyboardNav = e.target.checked;
-  save();
-});
 
 
 document.getElementById('add-group-btn').addEventListener('click', addGroup);
@@ -828,10 +841,30 @@ document.getElementById('service-list').addEventListener('change', (e) => {
   save();
 });
 
+// ── Tabs ───────────────────────────────────────────────────────────────────
+
+// The selected tab is in the URL hash, so reloading or a link (options.html#services) keeps it
+const TABS = ['general', 'interface', 'services'];
+
+function showTab(id) {
+  if (!TABS.includes(id)) id = TABS[0];
+  for (const btn of document.querySelectorAll('.tabs [data-tab]')) btn.setAttribute('aria-selected', btn.dataset.tab === id);
+  for (const panel of document.querySelectorAll('.tab-panel')) panel.hidden = panel.id !== `tab-${id}`;
+}
+
+document.querySelector('.tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-tab]');
+  if (!btn) return;
+  history.replaceState(null, '', `#${btn.dataset.tab}`);
+  showTab(btn.dataset.tab);
+});
+window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+showTab(location.hash.slice(1));
+
 // ── Init ───────────────────────────────────────────────────────────────────
 
 chrome.storage.sync.get(
-  { enabled: true, dashboardNewTab: false, newTabTitle: '', actionOpens: 'popup', popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, popupWidth: 'auto', showMenuTitles: true, showMenuServices: true, showMenuGroups: true, keyboardNav: true, dashboardColumns: 'all', recentPerAccount: 5, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', ...GMAIL_DEFAULTS, popupSections: {}, popupOrder: null, searchButtons: {}, dashboardSections: null, accountOrder: [], accountLabels: {}, hiddenAccounts: [], manualAccountCount: 1, groups: null, services: {} },
+  { enabled: true, dashboardNewTab: false, newTabTitle: '', actionOpens: 'popup', popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, popupWidth: 'auto', popupSectionsMode: 'expanded', showMenuTitles: true, showMenuServices: true, showMenuGroups: true, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', dashboardTabPosition: 'next', dashboardSectionHeight: '420', dashboardPlacement: 'top', dashboardSize: '1200', ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS, popupSections: {}, popupOrder: null, searchButtons: {}, dashboardSections: null, accountOrder: [], accountLabels: {}, hiddenAccounts: [], manualAccountCount: 1, groups: null, services: {} },
   (data) => {
     state.enabled = data.enabled;
     state.dashboardNewTab = data.dashboardNewTab;
@@ -841,15 +874,17 @@ chrome.storage.sync.get(
     state.popupSize = data.popupSize;
     state.showPopupTitle = data.showPopupTitle;
     state.popupWidth = data.popupWidth;
+    state.popupSectionsMode = data.popupSectionsMode;
     state.showMenuTitles = data.showMenuTitles;
     state.showMenuServices = data.showMenuServices;
     state.showMenuGroups = data.showMenuGroups;
-    state.keyboardNav = data.keyboardNav;
-    state.dashboardColumns = data.dashboardColumns;
-    state.recentPerAccount = data.recentPerAccount;
     state.dashboardTitleFormat = data.dashboardTitleFormat;
     state.dashboardOpenLinks = data.dashboardOpenLinks;
-    for (const key of Object.keys(GMAIL_DEFAULTS)) state[key] = data[key];
+    state.dashboardTabPosition = data.dashboardTabPosition;
+    state.dashboardSectionHeight = data.dashboardSectionHeight;
+    state.dashboardPlacement = data.dashboardPlacement;
+    state.dashboardSize = data.dashboardSize;
+    for (const key of Object.keys({ ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS })) state[key] = data[key];
     state.popupSections = { ...state.popupSections, ...data.popupSections };
     state.popupOrder = popupOrder(data.popupOrder);
     state.searchButtons = { ...state.searchButtons, ...data.searchButtons };
@@ -882,13 +917,15 @@ chrome.storage.sync.get(
     document.getElementById('popup-size').value = state.popupSize;
     document.getElementById('show-popup-title').checked = state.showPopupTitle;
     document.getElementById('popup-width').value = state.popupWidth;
+    document.getElementById('popup-sections-mode').value = state.popupSectionsMode;
     document.getElementById('show-menu-titles').checked = state.showMenuTitles;
     document.getElementById('show-menu-groups').checked = state.showMenuGroups;
-    document.getElementById('keyboard-nav').checked = state.keyboardNav;
-    document.getElementById('dashboard-columns').value = state.dashboardColumns;
-    document.getElementById('recent-per-account').value = state.recentPerAccount;
     document.getElementById('dashboard-open-links').value = state.dashboardOpenLinks;
-    renderGmailSettings();
+    document.getElementById('dashboard-tab-position').value = state.dashboardTabPosition;
+    document.getElementById('dashboard-section-height').value = state.dashboardSectionHeight;
+    document.getElementById('dashboard-placement').value = state.dashboardPlacement;
+    document.getElementById('dashboard-size').value = state.dashboardSize;
+    renderSettingControls();
     titleMode = titleModeOf(state.dashboardTitleFormat);
     if (titleMode !== 'preset') titleInput.value = state.dashboardTitleFormat.replace(/^text:/, '');
     renderTitleFormat();

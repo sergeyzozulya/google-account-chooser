@@ -109,8 +109,30 @@
       color: var(--text-low);
       font-size: 13px;
       margin-bottom: 32px;
-      padding-left: 44px;
     }
+
+    /* Tabs: General, Interface, Services */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin: -8px 0 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tabs button {
+      padding: 10px 16px;
+      margin-bottom: -1px;
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: none;
+      font: inherit;
+      font-weight: 500;
+      color: var(--text-low);
+      cursor: pointer;
+    }
+
+    .tabs button:hover { color: var(--text); }
+    .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
 
     /* Card with header: remove top padding so header sits flush */
     .card:has(.card-header) {
@@ -432,13 +454,10 @@
       display: flex;
       align-items: center;
       padding: 0 4px 0 0;
-      opacity: 0;
-      transition: opacity 0.1s;
       flex-shrink: 0;
     }
 
     .drag-handle:active { cursor: grabbing; }
-    tr:hover .drag-handle { opacity: 1; }
     tr.dragging { opacity: 0.4; }
     tr.drop-above > td { box-shadow: inset 0 2px 0 var(--drop-line); }
     tr.drop-below > td { box-shadow: inset 0 -2px 0 var(--drop-line); }
@@ -577,7 +596,6 @@
     .sortable .table-row:last-child { border-bottom: none; }
     .table-row:hover { background: var(--hover-row); }
     .table-row .label { flex: 1; min-width: 0; }
-    .sortable .table-row:hover .drag-handle { opacity: 1; }
     .sortable .dragging { opacity: 0.4; }
     .sortable .drop-above { box-shadow: 0 -2px 0 var(--drop-line); }
     .sortable .drop-below { box-shadow: 0 2px 0 var(--drop-line); }
@@ -627,6 +645,14 @@
     </header>
     <p class="subtitle">Automatically routes Google service links through Account Chooser so you can pick the right Google account before the page loads — no more accidentally opening Gmail or Drive in the wrong account. <a href="https://itsua.com/gac/">About & Privacy</a></p>
 
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="general">General</button>
+      <button role="tab" data-tab="interface">Interface</button>
+      <button role="tab" data-tab="services">Services</button>
+    </nav>
+
+    <div class="tab-panel" id="tab-general">
+
     <!-- General -->
     <div class="card">
       <div class="card-header"><h2>General</h2></div>
@@ -669,24 +695,46 @@
       </div>
     </div>
 
+    <!-- Accounts: order, nicknames, and which ones the dashboard and popup show -->
+    <div class="card">
+      <div class="card-header"><h2>Accounts</h2></div>
+      <div class="settings-table">
+        <div id="dashboard-accounts" class="sortable"></div>
+      </div>
+    </div>
+
+    </div>
+
+    <div class="tab-panel" id="tab-interface" hidden>
     <!-- Dashboard -->
     <div class="card">
       <div class="card-header"><h2>Dashboard</h2></div>
       <!-- Laid out like the services table: grey group bands, drag-to-reorder rows -->
       <div class="settings-table">
-        <div class="table-group">
-          <span>Accounts</span>
-          <select class="select-field" id="dashboard-columns" title="Accounts per row">
-            <option value="all">All in one row</option>
-            <option value="1">1 per row</option>
-            <option value="2">2 per row</option>
-            <option value="3">3 per row</option>
-            <option value="4">4 per row</option>
-          </select>
-        </div>
-        <div id="dashboard-accounts" class="sortable"></div>
         <div class="table-group"><span>Sections</span></div>
         <div id="dashboard-sections" class="sortable"></div>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Placement</div>
+          <div class="hint">Where the dashboard sits in its tab: at the top, or centered vertically when it's shorter than the window.</div>
+        </div>
+        <select class="select-field" id="dashboard-placement">
+          <option value="top">Top</option>
+          <option value="center">Center</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Size</div>
+          <div class="hint">How wide the dashboard gets in a wide window.</div>
+        </div>
+        <select class="select-field" id="dashboard-size">
+          <option value="full">Full width</option>
+          <option value="1600">1600 px</option>
+          <option value="1200">1200 px</option>
+          <option value="960">960 px</option>
+        </select>
       </div>
       <div class="card-row">
         <div>
@@ -707,29 +755,6 @@
       </div>
       <div class="card-row">
         <div>
-          <div class="label">Search buttons</div>
-          <div class="hint">Which searches the dashboard offers. The first one shown is used when you press Enter; with none, the search bar is hidden.</div>
-        </div>
-        <div class="inline-switches">
-          <label class="inline-switch">Google <span class="switch"><input type="checkbox" data-search="google"><span class="slider"></span></span></label>
-          <label class="inline-switch">Gmail <span class="switch"><input type="checkbox" data-search="gmail"><span class="slider"></span></span></label>
-          <label class="inline-switch">Drive <span class="switch"><input type="checkbox" data-search="drive"><span class="slider"></span></span></label>
-        </div>
-      </div>
-      <div class="card-row">
-        <div>
-          <div class="label">Recent files per account</div>
-          <div class="hint">How many recently opened Docs, Sheets, Slides and Forms to list for each account.</div>
-        </div>
-        <select class="select-field" id="recent-per-account">
-          <option value="3">3</option>
-          <option value="5">5</option>
-          <option value="10">10</option>
-          <option value="20">20</option>
-        </select>
-      </div>
-      <div class="card-row">
-        <div>
           <div class="label">Open links</div>
           <div class="hint">Where dashboard links open (services, files, bookmarks, searches); with “New tab if pinned”, in place unless that tab is pinned. Ctrl/⌘-click always opens a new tab, and so does the popup.</div>
         </div>
@@ -739,11 +764,39 @@
           <option value="pinned">New tab if pinned</option>
         </select>
       </div>
+      <div class="card-row">
+        <div>
+          <div class="label">New tabs open</div>
+          <div class="hint">Where a tab the dashboard opens goes in the tab strip. Links that open in an installed web app (e.g. Gmail) open in its window.</div>
+        </div>
+        <select class="select-field" id="dashboard-tab-position">
+          <option value="next">Next to the dashboard</option>
+          <option value="end">At the end</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Section height</div>
+          <div class="hint">How tall Open tabs, Recent files and Statistics grow before they scroll; Auto shows them in full. The popup always shows them in full.</div>
+        </div>
+        <select class="select-field" id="dashboard-section-height">
+          <option value="auto">Auto</option>
+          <option value="240">240 px</option>
+          <option value="320">320 px</option>
+          <option value="420">420 px</option>
+          <option value="600">600 px</option>
+        </select>
+      </div>
     </div>
 
     <!-- Popup (the extension's toolbar popup) -->
     <div class="card">
       <div class="card-header"><h2>Popup</h2></div>
+      <!-- What the toolbar popup shows; everything but the launcher comes from the dashboard -->
+      <div class="settings-table">
+        <div class="table-group"><span>Sections</span></div>
+        <div id="popup-sections" class="sortable"></div>
+      </div>
       <div class="card-row">
         <div>
           <div class="label">Show title</div>
@@ -768,10 +821,31 @@
           <option value="800">800 px</option>
         </select>
       </div>
-      <!-- What the toolbar popup shows; everything but the launcher comes from the dashboard -->
-      <div class="settings-table">
-        <div class="table-group"><span>Show in popup</span></div>
-        <div id="popup-sections" class="sortable"></div>
+      <div class="card-row">
+        <div>
+          <div class="label">Layout</div>
+          <div class="hint">Show every dashboard section in the popup expanded, or as an accordion: one open at a time (the first when the popup opens), the others folded to their title.</div>
+        </div>
+        <select class="select-field" id="popup-sections-mode">
+          <option value="expanded">All expanded</option>
+          <option value="accordion">Accordion</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Search (dashboard section, also in the popup) -->
+    <div class="card">
+      <div class="card-header"><h2>Search</h2></div>
+      <div class="card-row">
+        <div>
+          <div class="label">Search buttons</div>
+          <div class="hint">Which searches the dashboard offers. The first one shown is used when you press Enter; with none, Enter searches Google.</div>
+        </div>
+        <div class="inline-switches">
+          <label class="inline-switch">Google <span class="switch"><input type="checkbox" data-search="google"><span class="slider"></span></span></label>
+          <label class="inline-switch">Gmail <span class="switch"><input type="checkbox" data-search="gmail"><span class="slider"></span></span></label>
+          <label class="inline-switch">Drive <span class="switch"><input type="checkbox" data-search="drive"><span class="slider"></span></span></label>
+        </div>
       </div>
     </div>
 
@@ -878,13 +952,121 @@
       </div>
     </div>
 
+    <!-- Open tabs (dashboard section, also in the popup) -->
+    <div class="card">
+      <div class="card-header"><h2>Open tabs</h2></div>
+      <div class="card-row">
+        <div>
+          <div class="label">Tabs</div>
+          <div class="hint">Which open tabs to list. Grouped by account, tabs of other sites go under Other tabs.</div>
+        </div>
+        <select class="select-field" data-panel="tabsScope">
+          <option value="all">All tabs</option>
+          <option value="google">Only Google services</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Grouping</div>
+          <div class="hint">List tabs under each browser window and installed web app (with just one window, in a single list), under each account, or in one list in window order. Unless grouped by account, each tab shows its account's avatar.</div>
+        </div>
+        <select class="select-field" data-panel="tabsGroupBy">
+          <option value="window">Group by window</option>
+          <option value="account">Group by account</option>
+          <option value="none">No group</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Close buttons</div>
+          <div class="hint">Show × on a tab's row when you point at it, to close the tab from the list (on the dashboard and in the popup).</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" data-panel="tabsClose">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Tab groups</div>
+          <div class="hint">Mark tabs in a Chrome tab group with a strip of the group's color; point at a tab to see the group's name.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" data-panel="tabsGroupColors">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Recent files (dashboard section, also in the popup) -->
+    <div class="card">
+      <div class="card-header"><h2>Recent files</h2></div>
+      <div class="card-row">
+        <div>
+          <div class="label">Files listed</div>
+          <div class="hint">How many files each group lists (each account or type), or the whole list when not grouped.</div>
+        </div>
+        <select class="select-field" data-panel="recentPerAccount">
+          <option value="3">3</option>
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Grouping</div>
+          <div class="hint">List files under each account, under each type (Docs, Sheets, Slides, Forms), or in one list. Unless grouped by account, each file shows its account's avatar.</div>
+        </div>
+        <select class="select-field" data-panel="recentGroupBy">
+          <option value="account">Group by account</option>
+          <option value="type">Group by type</option>
+          <option value="none">No group</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">File types</div>
+          <div class="hint">Which kinds of files to list.</div>
+        </div>
+        <div class="inline-switches">
+          <label class="inline-switch">Docs <span class="switch"><input type="checkbox" data-panel="recentDocs"><span class="slider"></span></span></label>
+          <label class="inline-switch">Sheets <span class="switch"><input type="checkbox" data-panel="recentSheets"><span class="slider"></span></span></label>
+          <label class="inline-switch">Slides <span class="switch"><input type="checkbox" data-panel="recentSlides"><span class="slider"></span></span></label>
+          <label class="inline-switch">Forms <span class="switch"><input type="checkbox" data-panel="recentForms"><span class="slider"></span></span></label>
+        </div>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Period</div>
+          <div class="hint">List files opened within this time. Chrome keeps about 90 days of history.</div>
+        </div>
+        <select class="select-field" data-panel="recentDays">
+          <option value="1">1 day</option>
+          <option value="7">7 days</option>
+          <option value="30">30 days</option>
+          <option value="90">90 days</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Sort</div>
+          <div class="hint">Most visited counts every visit to a file in your browser history.</div>
+        </div>
+        <select class="select-field" data-panel="recentSort">
+          <option value="recent">Last opened</option>
+          <option value="visits">Most visited</option>
+        </select>
+      </div>
+    </div>
+
     <!-- Launcher -->
     <div class="card">
       <div class="card-header"><h2>Launcher</h2></div>
       <div class="card-row">
         <div>
           <div class="label">Show service groups</div>
-          <div class="hint">Show group separators (Workspace, Personal, etc.) between service icons in the launcher.</div>
+          <div class="hint">Show group separators (Connect, Create, etc.) between service icons in the launcher.</div>
         </div>
         <label class="switch">
           <input type="checkbox" id="show-menu-groups">
@@ -902,19 +1084,11 @@
           <span class="slider"></span>
         </label>
       </div>
-
-      <div class="card-row">
-        <div>
-          <div class="label">Keyboard navigation</div>
-          <div class="hint">Use arrow keys to navigate between services in the launcher.</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="keyboard-nav" checked>
-          <span class="slider"></span>
-        </label>
-      </div>
     </div>
 
+    </div>
+
+    <div class="tab-panel" id="tab-services" hidden>
     <!-- Per-service table -->
     <div class="services-card">
       <table>
@@ -962,6 +1136,7 @@
         </select>
       </div>
 
+    </div>
     </div>
   </div>
 

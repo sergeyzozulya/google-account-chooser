@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, SERVICE_GROUPS, accountServiceUrl, popupOrder, formatDate */
+/* global SERVICE_DEFS, SERVICE_GROUPS, reconcileGroups, accountServiceUrl, popupOrder, formatDate */
 
 const menuEl = document.getElementById('service-menu');
 
@@ -14,9 +14,9 @@ const sidePanel = new URLSearchParams(location.search).has('sidepanel');
 if (sidePanel) document.body.classList.add('side-panel');
 
 chrome.storage.sync.get(
-  { showPopupTitle: true, popupWidth: 'auto', showMenuTitles: true, showMenuServices: true, showMenuGroups: true, showMenuOptions: true, keyboardNav: true, popupSections: {}, popupOrder: null, dashboardTitleFormat: 'auto', groups: null, services: {} },
+  { showPopupTitle: true, popupWidth: 'auto', popupSectionsMode: 'expanded', showMenuTitles: true, showMenuServices: true, showMenuGroups: true, popupSections: {}, popupOrder: null, dashboardTitleFormat: 'auto', groups: null, services: {} },
   (data) => {
-    const activeGroups = data.groups || SERVICE_GROUPS;
+    const activeGroups = data.groups ? reconcileGroups(data.groups) : SERVICE_GROUPS;
 
     // Collect services marked for the menu, grouped
     const groups = activeGroups
@@ -54,7 +54,7 @@ chrome.storage.sync.get(
     if (showTitle) renderTitle(data.dashboardTitleFormat);
 
     if (showServices) {
-      renderMenu(groups, data.showMenuTitles, data.showMenuGroups, data.keyboardNav);
+      renderMenu(groups, data.showMenuTitles, data.showMenuGroups);
       menuEl.style.display = '';
     }
 
@@ -62,11 +62,16 @@ chrome.storage.sync.get(
     menuEl.style.paddingTop = (showServices && showTitle) ? '' : '0';
 
     if (showSections) {
+      // Options → Popup → Layout → Accordion: the first section opens
+      const open = data.popupSectionsMode === 'accordion'
+        ? shown.find(id => id !== 'launcher') ?? ''
+        : null;
+      // Without a launcher, the first frame takes the keyboard focus
       const at = shown.indexOf('launcher');
-      if (at === -1) embedDashboard(shown, 'after');
+      if (at === -1) embedDashboard(shown, 'after', open, true);
       else {
-        if (at > 0) embedDashboard(shown.slice(0, at), 'before');
-        if (at < shown.length - 1) embedDashboard(shown.slice(at + 1), 'after');
+        if (at > 0) embedDashboard(shown.slice(0, at), 'before', open);
+        if (at < shown.length - 1) embedDashboard(shown.slice(at + 1), 'after', open);
       }
     }
 
@@ -83,17 +88,28 @@ function renderTitle(format) {
 }
 
 // Dashboard sections (ids, in order) rendered by the dashboard in popup mode, placed before or
-// after the launcher; each frame reports its height and asks to close the popup after opening something
-function embedDashboard(ids, position) {
+// after the launcher; each frame reports its height and asks to close the popup after opening something.
+// With `open` (a section id, or '' for none) the sections are an accordion: a section opened in one
+// frame folds the others' too.
+const dashboardFrames = [];
+
+function embedDashboard(ids, position, open, focus = false) {
   document.body.classList.add('with-dashboard');
   const frame = document.createElement('iframe');
   frame.className = `dashboard-frame ${position}`;
-  frame.src = `dashboard.html?popup=${ids.join(',')}`;
+  frame.src = `dashboard.html?popup=${ids.join(',')}${open === null ? '' : `&accordion=${open}`}${focus ? '&focus' : ''}`;
   menuEl[position](frame);
+  dashboardFrames.push(frame);
   window.addEventListener('message', (e) => {
     if (e.source !== frame.contentWindow) return;
     if (e.data.type === 'resize') frame.style.height = `${e.data.height}px`;
     if (e.data.type === 'close' && !sidePanel) window.close();
+    if (e.data.type === 'nav') moveToRegion(frame, e.data.dir);
+    if (e.data.type === 'section') {
+      for (const other of dashboardFrames.filter(f => f !== frame)) {
+        other.contentWindow.postMessage({ type: 'section', id: e.data.id }, location.origin);
+      }
+    }
   });
 }
 
@@ -103,7 +119,7 @@ if (account !== null) {
   });
 }
 
-function renderMenu(groups, showTitles, showGroups, keyboardNav) {
+function renderMenu(groups, showTitles, showGroups) {
   const btnHtml = (s) => `
     <button class="svc-icon-btn" data-host="${s.host}"
             data-url="${account === null ? `https://${s.host}/` : accountServiceUrl(s.host, account)}" title="${s.label}">
@@ -131,7 +147,7 @@ function renderMenu(groups, showTitles, showGroups, keyboardNav) {
     });
   });
 
-  if (keyboardNav) initKeyboardNav();
+  initKeyboardNav();
 }
 
 document.getElementById('options-btn').addEventListener('click', () => {
@@ -144,6 +160,45 @@ document.getElementById('whats-new-btn').addEventListener('click', () => {
 
 document.getElementById('dashboard-btn').addEventListener('click', () => {
   chrome.tabs.create({ url: 'dashboard.html' });
+});
+
+// ── Keyboard ───────────────────────────────────────────────────────────────
+// Arrow keys move through the whole popup: the header's buttons, the dashboard frame above the
+// launcher, the launcher, and the frame below it. Past a region's first or last control, focus
+// goes to the previous or next region.
+
+function navRegions() {
+  return [
+    document.querySelector('header').style.display === 'none' ? null : document.querySelector('header'),
+    document.querySelector('.dashboard-frame.before'),
+    menuEl.querySelector('button[data-url]') ? menuEl : null,
+    document.querySelector('.dashboard-frame.after'),
+  ].filter(Boolean);
+}
+
+function moveToRegion(from, dir) {
+  const regions = navRegions();
+  const to = regions[regions.indexOf(from) + (dir === 'next' ? 1 : -1)];
+  if (!to) return;
+  const at = dir === 'next' ? 'first' : 'last';
+  if (to.tagName === 'IFRAME') {
+    to.contentWindow.focus();
+    to.contentWindow.postMessage({ type: 'focus', at }, location.origin);
+  } else {
+    const buttons = [...to.querySelectorAll(to === menuEl ? 'button[data-url]' : 'button')];
+    (at === 'first' ? buttons[0] : buttons.at(-1)).focus();
+  }
+}
+
+const headerEl = document.querySelector('header');
+headerEl.addEventListener('keydown', (e) => {
+  const buttons = [...headerEl.querySelectorAll('button')];
+  const i = buttons.indexOf(document.activeElement);
+  if (e.key === 'ArrowLeft' && i > 0) buttons[i - 1].focus();
+  else if (e.key === 'ArrowRight' && i < buttons.length - 1) buttons[i + 1].focus();
+  else if (e.key === 'ArrowDown') moveToRegion(headerEl, 'next');
+  else return;
+  e.preventDefault();
 });
 
 function initKeyboardNav() {
@@ -186,11 +241,19 @@ function initKeyboardNav() {
       case 'ArrowDown':
         if (rowIndex < rows.length - 1) {
           idx = rows[rowIndex + 1][Math.min(colIndex, rows[rowIndex + 1].length - 1)];
+        } else {
+          e.preventDefault();
+          moveToRegion(menuEl, 'next');
+          return;
         }
         break;
       case 'ArrowUp':
         if (rowIndex > 0) {
           idx = rows[rowIndex - 1][Math.min(colIndex, rows[rowIndex - 1].length - 1)];
+        } else {
+          e.preventDefault();
+          moveToRegion(menuEl, 'prev');
+          return;
         }
         break;
       case 'Home':       idx = rows[0][0]; break;

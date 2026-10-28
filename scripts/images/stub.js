@@ -127,8 +127,9 @@
       getURL: (p) => p,
       sendMessage: (msg) => Promise.resolve(msg?.type === 'feed' && msg.n in unread ? { status: 200, text: feed(msg.n) } : undefined),
     },
-    tabs: { create: () => Promise.resolve(), update: noop, query: () => Promise.resolve(tabs), onCreated: event, onRemoved: event, onUpdated: event },
-    windows: { update: noop },
+    tabs: { create: () => Promise.resolve(), update: noop, query: () => Promise.resolve(tabs), onCreated: event, onRemoved: event, onUpdated: event, onAttached: event },
+    tabGroups: { query: () => Promise.resolve([]), onUpdated: event },
+    windows: { update: noop, getCurrent: () => Promise.resolve({ id: 1 }), getAll: () => Promise.resolve([{ id: 1, type: 'normal' }]) },
     permissions: { contains: () => Promise.resolve(true), request: () => Promise.resolve(true), remove: () => Promise.resolve() },
     history: { search: () => Promise.resolve(history) },
     bookmarks: {

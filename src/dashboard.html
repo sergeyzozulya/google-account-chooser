@@ -51,8 +51,17 @@
 
     [hidden] { display: none !important; }
 
+    /* Options → Dashboard → Placement → Center: vertically centered while shorter than the window */
+    body.centered:not(.embedded) .page {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+
     .page {
-      max-width: 1200px;
+      max-width: var(--page-width, 1200px);
       margin: 0 auto;
       padding: 32px 24px 60px;
     }
@@ -108,6 +117,10 @@
     .panel:hover .section-head .text-btn,
     .panel .section-head .text-btn:focus-visible { opacity: 1; }
 
+    /* Keyboard focus looks like the launcher's: a hover background, no ring */
+    button:focus-visible,
+    .section-head[tabindex]:focus-visible { outline: none; background: var(--hover); }
+
     /* Search */
     /* Popup mode (dashboard.html?popup inside the toolbar popup) */
     body.embedded { min-height: 0; background: var(--bg); }
@@ -121,10 +134,24 @@
     .embedded .search-field { flex-basis: 100%; }
     .embedded #search > span > button,
     .embedded #search .split-main { padding-top: 7px; padding-bottom: 7px; }
-    .embedded .panel-body { max-height: 220px; }
-    .embedded #accounts { gap: 8px; }
 
-    /* Account launcher expanded inside its card (popup mode) */
+    /* Options → Popup → Layout → Accordion: heads (shown even without a title) open their section */
+    .accordion #sections > [data-section] > .section-head { display: flex; cursor: pointer; user-select: none; }
+    .accordion #sections > [data-section] > .section-head::after {
+      content: '';
+      flex-shrink: 0;
+      width: 6px;
+      height: 6px;
+      margin: 0 4px 3px auto;
+      border-right: 2px solid var(--text-muted);
+      border-bottom: 2px solid var(--text-muted);
+      transform: rotate(45deg);
+    }
+    .accordion #sections > .collapsed > .section-head { border-bottom: none; }
+    .accordion #sections > .collapsed > .section-head::after { margin-bottom: 0; transform: rotate(-45deg); }
+    .accordion #sections > .collapsed > :not(.section-head) { display: none; }
+
+    /* Account launcher or inbox expanded inside its card (popup mode; the launcher also with accounts in a column) */
     .launcher.inline {
       position: static;
       display: block;
@@ -154,6 +181,7 @@
     #search {
       display: flex;
       gap: 8px;
+      padding: 12px 16px;
     }
 
     .search-field {
@@ -295,11 +323,11 @@
       border-radius: 8px;
     }
 
-    /* Accounts */
-    #accounts {
-      display: grid;
-      gap: 16px;
-    }
+    /* Accounts: one panel, accounts divided by lines */
+    #accounts { display: grid; }
+    #accounts > .acct + .acct { border-top: 1px solid var(--border); }
+    #accounts.in-row > .acct + .acct { border-top: none; border-left: 1px solid var(--border); }
+    #account-stepper .text-btn { opacity: 1; }
 
     .acct-head {
       display: flex;
@@ -407,6 +435,10 @@
 
     /* A message preview: wider and taller when floating, taller in a card */
     .inbox.previewing { display: flex; flex-direction: column; height: 420px; max-height: none; overflow: hidden; }
+    /* The popup grows with its sections instead of scrolling inside them */
+    .embedded .panel-body,
+    .embedded .inbox.in-card,
+    .embedded .launcher.inbox.inline:not(.previewing) { max-height: none; }
     .launcher.inbox.previewing:not(.inline) { width: min(640px, calc(100vw - 16px)); height: min(600px, 70vh); }
 
     .inbox-preview { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -536,7 +568,7 @@
     }
 
     .panel-body {
-      max-height: 420px;
+      max-height: var(--section-height, 420px);
       overflow-y: auto;
       padding: 6px 0;
     }
@@ -571,6 +603,7 @@
 
     .row:hover { background: var(--hover); }
     .group-label svg { flex-shrink: 0; }
+    .group-label > img { width: 18px; height: 18px; }
     .row img { width: 18px; height: 18px; flex-shrink: 0; }
 
     .row .title {
@@ -587,6 +620,26 @@
       color: var(--text-muted);
       white-space: nowrap;
     }
+
+    .row-account { display: flex; flex-shrink: 0; }
+
+    /* Options → Open tabs → Tab groups: the Chrome tab group's color at the row's edge */
+    .row.in-group { box-shadow: inset 3px 0 0 var(--group); }
+
+    /* Options → Open tabs → Close buttons: × on the row under the pointer */
+    .row .close {
+      display: flex;
+      flex-shrink: 0;
+      padding: 3px;
+      margin: -3px -6px -3px 0;
+      border-radius: 50%;
+      color: var(--text-low);
+      opacity: 0;
+    }
+
+    .row:hover .close { opacity: 1; }
+    .row .close:hover { background: rgba(128, 128, 128, .25); color: var(--text); }
+    .row .close svg { width: 14px; height: 14px; }
 
     .empty {
       padding: 16px;
@@ -632,6 +685,15 @@
     .bm-overflow { padding: 0 8px; }
     .bookmark-bar .empty { padding: 6px 8px; font-size: 12px; }
     .bookmark-bar .empty .text-btn { margin: 0 0 0 4px; }
+
+    /* Narrower than full width: a list whose folders open in place */
+    .bookmark-bar.vertical { flex-direction: column; align-items: stretch; }
+    .bookmark-bar.vertical .bm-items, .bm-children { display: flex; flex-direction: column; gap: 2px; }
+    .bookmark-bar.vertical .bm-btn { max-width: none; border-radius: 6px; }
+    .bookmark-bar.vertical .bm-btn[aria-expanded="true"]:not(:hover) { background: none; }
+    .bookmark-bar.vertical .chevron { width: 12px; height: 12px; margin-left: auto; color: var(--text-low); transition: transform .1s; }
+    .bookmark-bar.vertical [aria-expanded="true"] .chevron { transform: rotate(90deg); }
+    .bm-children { padding-left: 16px; }
 
     .bm-menu {
       position: absolute;
@@ -714,15 +776,20 @@
     </header>
 
     <main id="sections">
-      <form id="search" data-section="search">
-        <label class="search-field">
-          <input id="q" type="search" placeholder="Search" autocomplete="off">
-        </label>
-        <span id="search-buttons" style="display: contents"></span>
-      </form>
+      <section class="card panel" data-section="search">
+        <div class="section-head"><h2>Search</h2></div>
+        <form id="search">
+          <label class="search-field">
+            <input id="q" type="search" placeholder="Search" autocomplete="off">
+          </label>
+          <span id="search-buttons" style="display: contents"></span>
+        </form>
+      </section>
 
-      <section data-section="accounts">
+      <!-- One panel for all accounts, side by side or one per row -->
+      <section class="card panel" data-section="accounts">
         <div class="section-head" id="accounts-head">
+          <h2 id="accounts-title">Accounts</h2>
           <span class="hint" id="accounts-hint"></span>
           <div class="stepper" id="account-stepper" hidden>
             <button class="text-btn" id="account-remove" title="Remove account">−</button>

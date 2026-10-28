@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, accountFromUrl, accountServiceUrl, accountKey, orderAccounts, dashboardSections, sectionIcon, formatDate */
+/* global SERVICE_DEFS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, accountFromUrl, accountServiceUrl, accountKey, orderAccounts, dashboardSections, sectionIcon, formatDate */
 
 const DOCS_KINDS = {
   document:     'docs.google.com',
@@ -7,12 +7,19 @@ const DOCS_KINDS = {
   forms:        'forms.google.com',
 };
 
+// Docs URL path → its Options → Recent files → File types switch
+const RECENT_TYPES = {
+  document:     'recentDocs',
+  spreadsheets: 'recentSheets',
+  presentation: 'recentSlides',
+  forms:        'recentForms',
+};
+
 const SECTION_SPANS = { full: 12, 'two-thirds': 8, half: 6, third: 4 };
 
 const SVG_APPS = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">${
   [5, 12, 19].flatMap(y => [5, 12, 19].map(x => `<circle cx="${x}" cy="${y}" r="2.2"/>`)).join('')}</svg>`;
 
-const HISTORY_DAYS = 30;
 const MAX_ACCOUNTS = 10;
 
 let accounts = [];       // [{ index, email?, name?, photo? }]
@@ -22,16 +29,16 @@ let unread = {};         // account index → Gmail unread count
 const signedOut = new Set();  // account indexes whose Gmail session has lapsed (the feed answers 401)
 let mail = {};           // account index → unread inbox messages (Atom feed, at most 20)
 let mailSettings = { ...GMAIL_DEFAULTS };  // Options → Gmail
+let panelSettings = { ...PANEL_DEFAULTS }; // Options → Open tabs, Recent files
 let refreshTimer = null;
 const foldedMail = new Set();   // account indexes whose list the unread badge folded
 let accountLabels = {};  // accountKey → nickname (edited in Options)
 let accountOrder = [];   // accountKeys in display order (edited in Options)
 let hiddenAccounts = []; // accountKeys switched off in Options: no card, search or unread count
 let manualCount = 1;
-let columns = 'all';     // accounts per row: 'all' or a number as a string
-let recentPerAccount = 5;
 let titleFormat = 'auto';  // see formatDate in services-data.js
 let openLinks = 'new';   // where links open: 'new' tab, 'current' tab, or 'pinned' (new tab only from a pinned dashboard)
+let tabPosition = 'next'; // where new tabs go: 'next' to the dashboard or at the 'end' of its window
 let sections = [];       // [{ id, label, visible, width, title }] in display order
 let launcher = null;     // the open account launcher frame or inbox panel
 let searchButtons = { google: true, gmail: true, drive: true };
@@ -80,8 +87,12 @@ const accountIcon = (key) => avatarHtml(findAccount(key)?.photo, accountLabel(ke
 async function launch(url, service, tabId) {
   const withAccount = service && accountFromUrl(url) !== null;
   if (withAccount) await chrome.runtime.sendMessage({ type: 'open', url, service, tabId });
-  if (!tabId) window.open(url, '_blank', 'noopener');
-  else if (!withAccount) await chrome.tabs.update(tabId, { url });
+  if (tabId) {
+    if (!withAccount) await chrome.tabs.update(tabId, { url });
+  } else {
+    if (tabPosition === 'end' && !embedded) await moveNewTabToEnd();
+    window.open(url, '_blank', 'noopener');
+  }
   closePopup();
 }
 
@@ -106,6 +117,20 @@ async function openLink(url, service, newTab = false) {
   launch(url, service, await inPlaceTabId(newTab));
 }
 
+// Options → Dashboard → New tabs open → At the end. window.open puts the tab next to the dashboard,
+// so the next tab created in the dashboard's window is moved to the end; a link that opens in an
+// installed web app's window is left there.
+async function moveNewTabToEnd() {
+  const { windowId } = await chrome.tabs.getCurrent();
+  const onCreated = (tab) => {
+    chrome.tabs.onCreated.removeListener(onCreated);
+    clearTimeout(timer);
+    if (tab.windowId === windowId) chrome.tabs.move(tab.id, { index: -1 });
+  };
+  chrome.tabs.onCreated.addListener(onCreated);
+  const timer = setTimeout(() => chrome.tabs.onCreated.removeListener(onCreated), 2000);
+}
+
 // The dashboard's tab id when a link should open in place (Options → Dashboard → Open links).
 // Ctrl/⌘-click always opens a new tab, and so does the popup.
 async function inPlaceTabId(newTab) {
@@ -125,6 +150,17 @@ const embedded = popupIds !== undefined;
 const isNewTab = new URLSearchParams(location.search).has('newtab');
 const NEW_TAB_TITLE = 'New tab';
 const toPopup = (msg) => parent.postMessage(msg, location.origin);
+
+// Options → Popup → Layout → Accordion (dashboard.html?popup=…&accordion=<open section id>): one
+// section open at a time, the others folded to their head, which opens them
+const accordionOpen = new URLSearchParams(location.search).get('accordion');
+const accordion = accordionOpen !== null;
+
+function openSection(id) {
+  for (const el of document.querySelectorAll('#sections > [data-section]:has(> .section-head)')) {
+    el.classList.toggle('collapsed', el.dataset.section !== id);
+  }
+}
 
 function closePopup() {
   if (embedded) toPopup({ type: 'close' });
@@ -159,21 +195,55 @@ function applyLayout() {
   const container = document.getElementById('sections');
   for (const s of sections) {
     const el = container.querySelector(`:scope > [data-section="${s.id}"]`);
-    // Search has nothing to offer with every search button turned off
-    el.hidden = !s.visible || (s.id === 'search' && !Object.values(searchButtons).some(Boolean));
+    el.hidden = !s.visible;
     el.style.gridColumn = `span ${SECTION_SPANS[s.width]}`;
-    // Accounts has no title, only the detection hint and stepper
+    // Accounts keeps its head for the detection hint and stepper; renderAccountsHead hides it
     el.classList.toggle('no-title', !s.title && s.id !== 'accounts');
     container.append(el);
   }
+  applyColumns();
+  renderAccountsHead();
+  // Bookmarks narrower than full width list down the section instead of along a bar
+  bookmarkBar.classList.toggle('vertical', sections.find(s => s.id === 'bookmarks').width !== 'full');
+  if (bookmarkTree) drawBookmarks();
+}
+
+// Options → Dashboard → Section height: how tall panel lists grow before they scroll
+function applySectionHeight(height) {
+  document.documentElement.style.setProperty('--section-height', height === 'auto' ? 'none' : `${height}px`);
+}
+
+// Options → Dashboard → Placement and Size: the page at the top or centered vertically, and how
+// wide it gets. The popup fills its frame either way.
+function applyPage(placement, size) {
+  document.body.classList.toggle('centered', placement === 'center');
+  document.documentElement.style.setProperty('--page-width', size === 'full' ? 'none' : `${size}px`);
 }
 
 // Accounts with a card, in display order; hidden ones still name open tabs, recent files and stats
 const shownAccounts = () => orderAccounts(accounts.filter(a => !hiddenAccounts.includes(accountKey(a))), accountOrder);
 
+// Accounts side by side when their section is full width; otherwise, and in the popup, one per row
 function applyColumns() {
-  const count = columns === 'all' ? Math.max(shownAccounts().length, 1) : Number(columns);
-  document.getElementById('accounts').style.gridTemplateColumns = `repeat(${count}, minmax(0, 1fr))`;
+  const full = !embedded && sections.find(s => s.id === 'accounts').width === 'full';
+  const count = full ? Math.max(shownAccounts().length, 1) : 1;
+  const el = document.getElementById('accounts');
+  el.style.gridTemplateColumns = `repeat(${count}, minmax(0, 1fr))`;
+  el.classList.toggle('in-row', count > 1);
+}
+
+// The Accounts head: its title (Options → Dashboard → Sections → Title), and while detecting or
+// when detection failed, the hint and account count stepper
+function renderAccountsHead() {
+  // An accordion's heads always show: they open their section
+  const title = sections.find(s => s.id === 'accounts').title || accordion;
+  document.getElementById('accounts-head').hidden = detected && !title;
+  document.getElementById('accounts-title').hidden = !title;
+  document.getElementById('accounts-hint').hidden = detected;
+  document.getElementById('accounts-hint').textContent = detecting
+    ? 'Detecting signed-in accounts…'
+    : 'Couldn\'t detect signed-in accounts — set how many you use.';
+  document.getElementById('account-stepper').hidden = detected || detecting;
 }
 
 // ── Accounts ───────────────────────────────────────────────────────────────
@@ -310,7 +380,7 @@ function renderAccounts() {
     const secondary = accountLabels[accountKey(a)] ? a.email : a.name;
 
     return `
-      <section class="card" data-index="${a.index}">
+      <section class="acct" data-index="${a.index}">
         <div class="acct-head">
           ${avatarHtml(a.photo, name)}
           <div class="acct-id">
@@ -326,11 +396,7 @@ function renderAccounts() {
       </section>`;
   }).join('');
 
-  document.getElementById('accounts-head').hidden = detected;
-  document.getElementById('accounts-hint').textContent = detecting
-    ? 'Detecting signed-in accounts…'
-    : 'Couldn\'t detect signed-in accounts — set how many you use.';
-  document.getElementById('account-stepper').hidden = detecting;
+  renderAccountsHead();
 
   renderSearch();
   renderUnread();
@@ -468,10 +534,12 @@ function toggleOff(kind, index) {
 function placeLauncher(el, btn, kind, index) {
   el.dataset.kind = kind;
   el.dataset.index = index;
-  if (embedded) {
-    // In the toolbar popup there's no room for a floating panel: expand inside the account card
+  // In the toolbar popup there's no room for a floating panel, and the launcher of accounts in a
+  // column (section narrower than full width) fits their card: both expand inside the account card
+  const column = sections.find(s => s.id === 'accounts').width !== 'full';
+  if (embedded || (kind === 'launcher' && column)) {
     el.classList.add('inline');
-    btn.closest('section.card').append(el);
+    btn.closest('.acct').append(el);
   } else {
     const r = btn.getBoundingClientRect();
     el.style.top = `${r.bottom + scrollY + 6}px`;
@@ -507,7 +575,7 @@ let lastWidth = innerWidth;
 window.addEventListener('resize', () => {
   if (innerWidth === lastWidth) return;
   lastWidth = innerWidth;
-  closeLauncher();
+  if (!launcher?.classList.contains('inline')) closeLauncher();
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeLauncher();
@@ -555,7 +623,7 @@ function messagesHtml(messages) {
 // one shows a message
 function renderMail() {
   for (const a of accounts) {
-    const card = document.querySelector(`section.card[data-index="${a.index}"]`);
+    const card = document.querySelector(`.acct[data-index="${a.index}"]`);
     if (!card) continue;
     let list = card.querySelector(':scope > .inbox');
     if (!mailExpanded() || foldedMail.has(a.index) || !mail[a.index]?.length) {
@@ -752,7 +820,7 @@ function mailDate(ms) {
   return d.toLocaleDateString([], { year: '2-digit', month: 'numeric', day: 'numeric' });
 }
 
-// A steady letter-avatar colour per sender, like the Gmail app's
+// A steady letter-avatar color per sender, like the Gmail app's
 function senderColor(name) {
   let hash = 0;
   for (const c of name) hash = (hash * 31 + c.charCodeAt(0)) % 360;
@@ -761,36 +829,99 @@ function senderColor(name) {
 
 // ── Open tabs ──────────────────────────────────────────────────────────────
 
-// Items with a url, grouped by account key in order of first appearance.
-// URLs without an explicit account are grouped under `fallback`.
-function groupByAccount(items, fallback) {
+// Rows under a band per account key, in order of first appearance; items whose key is null go
+// last under `other` (icon and label HTML). A known account's index and email (URLs name it either
+// way, e.g. /u/0/ and authuser=name@gmail.com) share one band. Each group lists at most `limit` rows.
+function groupedRows(items, keyOf, other, row, limit = Infinity) {
   const groups = new Map();
   for (const item of items) {
-    const key = accountFromUrl(item.url) ?? fallback;
+    let key = keyOf(item);
+    if (key !== null && findAccount(key)) key = String(findAccount(key).index);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   }
-  return groups;
+  return [...groups].sort(([a], [b]) => (a === null) - (b === null)).map(([key, list]) => `
+    <div class="group-label">${key === null ? other : `${accountIcon(key)}${esc(accountLabel(key))}`}</div>
+    ${list.slice(0, limit).map(row).join('')}
+  `).join('');
 }
+
+// A row's account avatar when rows aren't grouped by account
+const rowAccount = (key) => key === null ? ''
+  : `<span class="row-account" title="${esc(accountLabel(key))}">${accountIcon(key)}</span>`;
+
+const SVG_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+// Chrome's tab group colors, as in its tab strip
+const TAB_GROUP_COLORS = {
+  grey: '#5f6368', blue: '#1a73e8', red: '#d93025', yellow: '#f9ab00', green: '#1e8e3e',
+  pink: '#d01884', purple: '#9334e6', cyan: '#007b83', orange: '#fa903e',
+};
+
+// Other sites' tabs show the favicon Chrome reports for them
+const tabIcon = (t) => /^(https?|data):/.test(t.favIconUrl || '')
+  ? `<img src="${esc(t.favIconUrl)}" alt="">` : sectionIcon('tabs');
 
 async function renderTabs() {
   const el = document.getElementById('tabs');
-  const tabs = (await chrome.tabs.query({})).filter(t => t.url && serviceForUrl(t.url));
+  const all = panelSettings.tabsScope === 'all';
+  // With all tabs, the extension's own pages (this dashboard among them) still aren't listed
+  const ownPages = `${location.origin}/`;
+  const tabs = (await chrome.tabs.query({}))
+    .filter(t => t.url && (all ? !t.url.startsWith(ownPages) : serviceForUrl(t.url)));
 
   if (tabs.length === 0) {
-    el.innerHTML = '<div class="empty">No Google service tabs are open.</div>';
+    el.innerHTML = `<div class="empty">${all ? 'No tabs are open.' : 'No Google service tabs are open.'}</div>`;
     return;
   }
 
-  // A tab without an explicit account shows the default account (index 0)
-  el.innerHTML = [...groupByAccount(tabs, '0')].map(([key, list]) => `
-    <div class="group-label">${accountIcon(key)}${esc(accountLabel(key))}</div>
-    ${list.map(t => `
-      <button class="row" data-tab="${t.id}" data-window="${t.windowId}" title="${esc(t.url)}">
-        ${SERVICE_DEFS[serviceForUrl(t.url)].icon}
+  const groups = panelSettings.tabsGroupColors
+    ? new Map((await chrome.tabGroups.query({})).map(g => [g.id, g]))
+    : new Map();
+
+  // A Google service tab without an explicit account shows the default account (index 0)
+  const accountOf = (t) => serviceForUrl(t.url) ? accountFromUrl(t.url) ?? '0' : null;
+  const row = (t) => {
+    const service = serviceForUrl(t.url);
+    const group = groups.get(t.groupId);
+    return `
+      <button class="row${group ? ' in-group' : ''}" data-tab="${t.id}" data-window="${t.windowId}"
+        ${group ? `style="--group: ${TAB_GROUP_COLORS[group.color]}"` : ''}
+        title="${esc(group?.title ? `${group.title}\n${t.url}` : t.url)}">
+        ${service ? SERVICE_DEFS[service].icon : tabIcon(t)}
         <span class="title">${esc(t.title || t.url)}</span>
-      </button>`).join('')}
-  `).join('');
+        ${panelSettings.tabsGroupBy === 'account' ? '' : rowAccount(accountOf(t))}
+        ${panelSettings.tabsClose ? `<span class="close" data-close-tab="${t.id}" title="Close tab">${SVG_CLOSE}</span>` : ''}
+      </button>`;
+  };
+  if (panelSettings.tabsGroupBy === 'account') {
+    el.innerHTML = groupedRows(tabs, accountOf, `${sectionIcon('tabs')}Other tabs`, row);
+    return;
+  }
+  // By window: the dashboard's (or popup's) window first, then other browser windows, then app
+  // windows (an installed web app, or a service in its own window), one band per app however many
+  // windows it has open (e.g. Gmail in two accounts), named after it. A single band needs no label.
+  const current = (await chrome.windows.getCurrent()).id;
+  const types = new Map((await chrome.windows.getAll({ windowTypes: ['normal', 'popup', 'app'] })).map(w => [w.id, w.type]));
+  const isApp = (t) => types.get(t.windowId) !== 'normal';
+  const appOf = (t) => serviceForUrl(t.url) || new URL(t.url).origin;
+  const bandOf = (t) => isApp(t) ? `app:${appOf(t)}` : t.windowId;
+  const bands = [...new Set(tabs.map(bandOf))]
+    .sort((a, b) => (b === current) - (a === current) || (typeof a === 'string') - (typeof b === 'string'));
+  let number = 1;
+  const bandLabel = (band) => {
+    if (band === current) return `${sectionIcon('tabs')}Current window`;
+    if (typeof band === 'number') return `${sectionIcon('tabs')}Window ${++number}`;
+    const tab = tabs.find(t => bandOf(t) === band);
+    const service = serviceForUrl(tab.url);
+    return service ? `${SERVICE_DEFS[service].icon}${SERVICE_DEFS[service].label}` : `${tabIcon(tab)}${esc(tab.title || tab.url)}`;
+  };
+  el.innerHTML = panelSettings.tabsGroupBy === 'none' || bands.length === 1
+    ? tabs.map(row).join('')
+    : bands.map(band => `
+      <div class="group-label">${bandLabel(band)}</div>
+      ${tabs.filter(t => bandOf(t) === band).map(row).join('')}
+    `).join('');
 }
 
 let _tabsTimer = null;
@@ -826,19 +957,21 @@ async function renderRecent() {
   const items = await chrome.history.search({
     text: 'docs.google.com',
     // Clear only hides files opened before it was pressed
-    startTime: Math.max(Date.now() - HISTORY_DAYS * 864e5, (await chrome.storage.local.get({ recentClearedAt: 0 })).recentClearedAt),
+    startTime: Math.max(Date.now() - panelSettings.recentDays * 864e5, (await chrome.storage.local.get({ recentClearedAt: 0 })).recentClearedAt),
     maxResults: 1000,
   });
   items.sort((a, b) => b.lastVisitTime - a.lastVisitTime);
 
-  // One entry per document, newest visit first. Docs URLs often omit the account, so take it
-  // from any visited URL of the same document and add it to the newest URL as authuser.
+  // One entry per document, newest visit first, with the visits of all its URLs. Docs URLs often
+  // omit the account, so take it from any visited URL of the same document and add it to the
+  // newest URL as authuser.
   const files = new Map();
   for (const item of items) {
     const m = item.url.match(/^https:\/\/docs\.google\.com\/(document|spreadsheets|presentation|forms)\/(?:u\/\d+\/)?d\/(?:e\/)?([\w-]+)/);
-    if (!m) continue;
-    if (!files.has(m[2])) files.set(m[2], { ...item, service: DOCS_KINDS[m[1]] });
+    if (!m || !panelSettings[RECENT_TYPES[m[1]]]) continue;
+    if (!files.has(m[2])) files.set(m[2], { ...item, service: DOCS_KINDS[m[1]], visits: 0 });
     const file = files.get(m[2]);
+    file.visits += item.visitCount;
     const account = accountFromUrl(item.url);
     if (account !== null && accountFromUrl(file.url) === null) {
       const url = new URL(file.url);
@@ -852,19 +985,35 @@ async function renderRecent() {
     return;
   }
 
-  // Files whose account can't be told go last; opening them goes through Account Chooser
-  const groups = [...groupByAccount(files.values(), null)].sort(([a], [b]) => (a === null) - (b === null));
-  el.innerHTML = groups.map(([key, list]) => `
-    <div class="group-label">${key === null
-      ? `${sectionIcon('accounts')}Account not known`
-      : `${accountIcon(key)}${esc(accountLabel(key))}`}</div>
-    ${list.slice(0, recentPerAccount).map(f => `
-      <button class="row" data-url="${esc(f.url)}" data-service="${f.service}" title="${esc(f.url)}">
-        ${SERVICE_DEFS[f.service].icon}
-        <span class="title">${esc((f.title || f.url).replace(/ - Google (Docs|Sheets|Slides|Forms)$/, ''))}</span>
-        <span class="meta">${relativeTime(f.lastVisitTime)}</span>
-      </button>`).join('')}
-  `).join('');
+  // Most visited first; equally visited files stay newest first
+  const list = [...files.values()];
+  if (panelSettings.recentSort === 'visits') list.sort((a, b) => b.visits - a.visits);
+
+  // A file none of whose visits names an account opened in Google's default account (index 0); its
+  // link stays as it was, so opening it still goes through Account Chooser
+  const accountOf = (f) => accountFromUrl(f.url) ?? '0';
+  const row = (f) => `
+    <button class="row" data-url="${esc(f.url)}" data-service="${f.service}" title="${esc(f.url)}">
+      ${SERVICE_DEFS[f.service].icon}
+      <span class="title">${esc((f.title || f.url).replace(/ - Google (Docs|Sheets|Slides|Forms)$/, ''))}</span>
+      ${panelSettings.recentGroupBy === 'account' ? '' : rowAccount(accountOf(f))}
+      <span class="meta">${relativeTime(f.lastVisitTime)}</span>
+    </button>`;
+  const limit = panelSettings.recentPerAccount;
+  if (panelSettings.recentGroupBy === 'account') {
+    el.innerHTML = groupedRows(list, accountOf, '', row, limit);
+  } else if (panelSettings.recentGroupBy === 'type') {
+    // Docs, Sheets, Slides, Forms, in that order
+    el.innerHTML = Object.values(DOCS_KINDS)
+      .map(service => [service, list.filter(f => f.service === service)])
+      .filter(([, files]) => files.length)
+      .map(([service, files]) => `
+        <div class="group-label">${SERVICE_DEFS[service].icon}${SERVICE_DEFS[service].label}</div>
+        ${files.slice(0, limit).map(row).join('')}
+      `).join('');
+  } else {
+    el.innerHTML = list.slice(0, limit).map(row).join('');
+  }
 }
 
 // ── Bookmarks bar (optional bookmarks + favicon permissions) ───────────────
@@ -878,6 +1027,8 @@ const SVG_FOLDER = svg('<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 
 const SVG_CHEVRON = svg('<polyline points="9 18 15 12 9 6"/>', 'chevron');
 const bookmarkBar = document.getElementById('bookmark-bar');
 let bookmarkNodes = new Map(); // id → node, for opening folder bookmarkMenus
+let bookmarkTree = null;       // { bar, other } folders from the last getTree
+const expandedFolders = new Set(); // folder ids open in the vertical list
 let bookmarkListeners = false;
 let bookmarkMenus = [];        // open menus, outermost first: { el, anchor }
 
@@ -888,10 +1039,17 @@ function bookmarkIcon(url) {
   return `<img src="${chrome.runtime.getURL('/_favicon/')}?pageUrl=${encodeURIComponent(url)}&size=32" alt="">`;
 }
 
-// Bar button for a bookmark or folder
-const barButton = (node) => node.url
+// Bar button for a bookmark or folder; in the vertical list a folder has a chevron and opens in place
+const barButton = (node, vertical = false) => node.url
   ? `<button class="bm-btn" data-bookmark="${node.id}" title="${esc(`${node.title}\n${node.url}`)}">${bookmarkIcon(node.url)}${node.title ? `<span>${esc(node.title)}</span>` : ''}</button>`
-  : `<button class="bm-btn" data-folder="${node.id}" aria-expanded="false" title="${esc(node.title)}">${SVG_FOLDER}<span>${esc(node.title)}</span></button>`;
+  : `<button class="bm-btn" data-folder="${node.id}" aria-expanded="${vertical && expandedFolders.has(node.id)}" title="${esc(node.title)}">${SVG_FOLDER}<span>${esc(node.title)}</span>${vertical ? SVG_CHEVRON : ''}</button>`;
+
+// Buttons for nodes; in the vertical list an open folder's contents follow it, indented
+function bookmarkButtons(nodes, vertical) {
+  return nodes.map(node => barButton(node, vertical) + (vertical && !node.url && expandedFolders.has(node.id)
+    ? `<div class="bm-children">${bookmarkButtons(node.children, true) || '<div class="empty">(empty)</div>'}</div>`
+    : '')).join('');
+}
 
 async function renderBookmarks() {
   closeBookmarkMenus();
@@ -909,24 +1067,33 @@ async function renderBookmarks() {
   const [root] = await chrome.bookmarks.getTree();
   bookmarkNodes = new Map();
   (function index(node) { bookmarkNodes.set(node.id, node); node.children?.forEach(index); })(root);
-  const bar = root.children.find(n => n.folderType === 'bookmarks-bar') || root.children[0];
-  const other = root.children.find(n => n.folderType === 'other') || root.children[1];
+  bookmarkTree = {
+    bar: root.children.find(n => n.folderType === 'bookmarks-bar') || root.children[0],
+    other: root.children.find(n => n.folderType === 'other') || root.children[1],
+  };
+  drawBookmarks();
+}
 
+function drawBookmarks() {
+  closeBookmarkMenus();
+  const { bar, other } = bookmarkTree;
+  const vertical = bookmarkBar.classList.contains('vertical');
   bookmarkBar.innerHTML = `
-    <div class="bm-items">${bar.children.map(barButton).join('')
+    <div class="bm-items">${bookmarkButtons(bar.children, vertical)
       || '<div class="empty">For quick access, place your bookmarks here on the bookmarks bar.</div>'}</div>
     <button class="bm-btn bm-overflow" data-folder="overflow" aria-expanded="false" title="More bookmarks" hidden>»</button>
-    ${other?.children.length ? barButton(other) : ''}`;
+    ${other?.children.length ? bookmarkButtons([other], vertical) : ''}`;
   fitBookmarks();
 }
 
-// Hide bar items that don't fit; they're listed in the » menu instead
+// Hide bar items that don't fit; they're listed in the » menu instead. A vertical list shows them all.
 function fitBookmarks() {
   const items = bookmarkBar.querySelector('.bm-items');
   const overflowBtn = bookmarkBar.querySelector('.bm-overflow');
   if (!items || !overflowBtn) return;
   const buttons = [...items.querySelectorAll('.bm-btn')];
   buttons.forEach(b => { b.hidden = false; });
+  if (bookmarkBar.classList.contains('vertical')) { overflowBtn.hidden = true; return; }
   overflowBtn.hidden = false; // reserve its space while measuring
   const limit = items.getBoundingClientRect().right;
   const hidden = buttons.filter(b => b.getBoundingClientRect().right > limit + 0.5);
@@ -986,6 +1153,12 @@ function onBookmarkClick(e) {
   if (bookmark) { openBookmark(bookmarkNodes.get(bookmark.dataset.bookmark), e); return; }
   const folder = e.target.closest('[data-folder]');
   if (!folder) return;
+  if (bookmarkBar.classList.contains('vertical') && folder.closest('#bookmark-bar')) {
+    const id = folder.dataset.folder;
+    if (!expandedFolders.delete(id)) expandedFolders.add(id);
+    drawBookmarks();
+    return;
+  }
   const level = folder.closest('.bm-menu') ? bookmarkMenus.findIndex(m => m.el === folder.closest('.bm-menu')) + 1 : 0;
   if (level === 0 && folder.getAttribute('aria-expanded') === 'true') closeBookmarkMenus();
   else openBookmarkMenu(folder, level);
@@ -1059,31 +1232,37 @@ async function init() {
   renderClock();
   addSectionIcons();
   const data = await chrome.storage.sync.get({
-    accountLabels: {}, accountOrder: [], hiddenAccounts: [], manualAccountCount: 1, dashboardColumns: 'all', dashboardSections: null, recentPerAccount: 5,
-    searchButtons: searchButtons, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', newTabTitle: '', ...GMAIL_DEFAULTS,
+    accountLabels: {}, accountOrder: [], hiddenAccounts: [], manualAccountCount: 1, dashboardSections: null,
+    searchButtons: searchButtons, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', dashboardTabPosition: 'next', dashboardSectionHeight: '420', dashboardPlacement: 'top', dashboardSize: '1200', newTabTitle: '', ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS,
   });
   titleFormat = data.dashboardTitleFormat;
   openLinks = data.dashboardOpenLinks;
+  tabPosition = data.dashboardTabPosition;
+  applySectionHeight(data.dashboardSectionHeight);
+  applyPage(data.dashboardPlacement, data.dashboardSize);
   mailSettings = Object.fromEntries(Object.keys(GMAIL_DEFAULTS).map(key => [key, data[key]]));
   applyMailLook();
+  panelSettings = Object.fromEntries(Object.keys(PANEL_DEFAULTS).map(key => [key, data[key]]));
   if (isNewTab) document.title = data.newTabTitle || NEW_TAB_TITLE;
   renderClock();
   accountLabels = data.accountLabels;
   accountOrder = data.accountOrder;
   hiddenAccounts = data.hiddenAccounts;
   manualCount = data.manualAccountCount;
-  columns = data.dashboardColumns;
-  recentPerAccount = data.recentPerAccount;
   searchButtons = { ...searchButtons, ...data.searchButtons };
   sections = dashboardSections(data.dashboardSections);
   if (embedded) {
     document.body.classList.add('embedded');
-    columns = '1';
     // Listed sections in the popup's order; titles follow Options → Dashboard → Sections
     sections = [
       ...popupIds.map(id => ({ ...sections.find(s => s.id === id), visible: true })),
       ...sections.filter(s => !popupIds.includes(s.id)).map(s => ({ ...s, visible: false })),
     ];
+    if (accordion) {
+      document.body.classList.add('accordion');
+      openSection(accordionOpen);
+      for (const head of document.querySelectorAll('#sections > [data-section] > .section-head')) head.tabIndex = 0;
+    }
     new ResizeObserver(postHeight).observe(document.body);
   } else {
     document.getElementById('q').focus();
@@ -1100,6 +1279,8 @@ async function init() {
   }
 
   renderAll();
+  // dashboard.html?popup=…&focus: the popup has no launcher, so its first control takes the focus
+  if (new URLSearchParams(location.search).has('focus')) focusEdge('first');
   refresh();
   scheduleRefresh();
 }
@@ -1120,6 +1301,9 @@ document.addEventListener('click', async (e) => {
 
   const link = e.target.closest('[data-url]');
   if (link) { openLink(link.dataset.url, link.dataset.service, e.ctrlKey || e.metaKey); return; }
+
+  const close = e.target.closest('[data-close-tab]');
+  if (close) { chrome.tabs.remove(Number(close.dataset.closeTab)); return; }
 
   const tab = e.target.closest('[data-tab]');
   if (tab) {
@@ -1146,6 +1330,56 @@ document.addEventListener('click', async (e) => {
   }
 });
 
+// An accordion head opens its section (or folds it when open), here and in the popup's other frame
+document.addEventListener('click', (e) => {
+  const head = accordion && e.target.closest('#sections > [data-section] > .section-head');
+  if (!head || e.target.closest('button')) return;
+  const id = head.parentElement.classList.contains('collapsed') ? head.parentElement.dataset.section : '';
+  openSection(id);
+  toPopup({ type: 'section', id });
+});
+
+window.addEventListener('message', (e) => {
+  if (e.source !== parent || e.origin !== location.origin) return;
+  if (accordion && e.data.type === 'section') openSection(e.data.id);
+  if (e.data.type === 'focus') focusEdge(e.data.at);
+});
+
+// ── Keyboard (popup) ───────────────────────────────────────────────────────
+// In the toolbar popup the arrow keys move through every control in page order: Up and Down, and
+// Left and Right outside a text field. Past the first or last one, the popup moves focus on to the
+// launcher or its other frame.
+
+// Clear (Recent files) and Reset (Statistics) are mouse-only: the arrow keys skip them
+const navItems = () => [...document.querySelectorAll('button, input, .section-head[tabindex]')]
+  .filter(el => !el.disabled && el.getClientRects().length && !el.matches('#recent-clear, #stats-reset'));
+
+function focusEdge(at) {
+  const items = navItems();
+  (at === 'last' ? items.at(-1) : items[0])?.focus();
+}
+
+if (embedded) {
+  document.addEventListener('keydown', (e) => {
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    // An accordion head opens or folds its section with Enter or Space
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.section-head[tabindex]')) {
+      e.preventDefault();
+      e.target.click();
+      return;
+    }
+    const typing = e.target.matches('input');
+    const dir = e.key === 'ArrowDown' || (e.key === 'ArrowRight' && !typing) ? 1
+      : e.key === 'ArrowUp' || (e.key === 'ArrowLeft' && !typing) ? -1 : 0;
+    if (!dir) return;
+    e.preventDefault();
+    const items = navItems();
+    const next = items[items.indexOf(document.activeElement) + dir] ?? (items.includes(document.activeElement) ? null : items[0]);
+    if (next) next.focus();
+    else toPopup({ type: 'nav', dir: dir > 0 ? 'next' : 'prev' });
+  });
+}
+
 document.getElementById('recent-clear').addEventListener('click', async () => {
   await chrome.storage.local.set({ recentClearedAt: Date.now() });
   renderRecent();
@@ -1161,23 +1395,33 @@ document.getElementById('account-remove').addEventListener('click', () => setMan
 document.getElementById('search').addEventListener('submit', (e) => {
   e.preventDefault();
   const q = document.getElementById('q').value.trim();
-  const target = SEARCH_TARGETS[e.submitter?.value];
+  // Enter with no search buttons searches Google
+  const id = e.submitter?.value ?? 'google';
+  const target = SEARCH_TARGETS[id];
   if (!q || !target) return;
-  const url = target.url(encodeURIComponent(q), searchAccount[e.submitter.value] ?? 0);
+  const url = target.url(encodeURIComponent(q), searchAccount[id] ?? 0);
   openLink(url, target.service);
 });
 
 chrome.tabs.onCreated.addListener(scheduleRenderTabs);
 chrome.tabs.onRemoved.addListener(scheduleRenderTabs);
+chrome.tabs.onAttached.addListener(scheduleRenderTabs);
 chrome.tabs.onUpdated.addListener((_id, change) => {
-  if (change.url || change.title) scheduleRenderTabs();
+  if (change.url || change.title || change.favIconUrl || change.groupId !== undefined) scheduleRenderTabs();
 });
+chrome.tabGroups.onUpdated.addListener(scheduleRenderTabs);
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.stats) renderStats();
   if (area !== 'sync') return;
   if (changes.newTabTitle && isNewTab) document.title = changes.newTabTitle.newValue || NEW_TAB_TITLE;
   if (changes.dashboardOpenLinks) openLinks = changes.dashboardOpenLinks.newValue;
+  if (changes.dashboardTabPosition) tabPosition = changes.dashboardTabPosition.newValue;
+  if (changes.dashboardSectionHeight) applySectionHeight(changes.dashboardSectionHeight.newValue);
+  if (changes.dashboardPlacement || changes.dashboardSize) {
+    chrome.storage.sync.get({ dashboardPlacement: 'top', dashboardSize: '1200' })
+      .then(data => applyPage(data.dashboardPlacement, data.dashboardSize));
+  }
   const mailChanges = Object.keys(GMAIL_DEFAULTS).filter(key => changes[key]);
   if (mailChanges.length) {
     for (const key of mailChanges) mailSettings[key] = changes[key].newValue ?? GMAIL_DEFAULTS[key];
@@ -1194,13 +1438,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
     renderSearch();
     applyLayout();
   }
-  if (changes.recentPerAccount) {
-    recentPerAccount = changes.recentPerAccount.newValue;
-    renderRecent();
-  }
-  if (changes.dashboardColumns && !embedded) {
-    columns = changes.dashboardColumns.newValue;
-    applyColumns();
+  const panelChanges = Object.keys(PANEL_DEFAULTS).filter(key => changes[key]);
+  if (panelChanges.length) {
+    for (const key of panelChanges) panelSettings[key] = changes[key].newValue ?? PANEL_DEFAULTS[key];
+    if (panelChanges.some(key => key.startsWith('tabs'))) renderTabs();
+    if (panelChanges.some(key => key.startsWith('recent'))) renderRecent();
   }
   if (changes.accountLabels || changes.accountOrder) {
     accountLabels = changes.accountLabels?.newValue ?? accountLabels;
@@ -1218,10 +1460,20 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
+// The dashboard coming back into view (its tab selected, or its window focused) shows what changed
+// meanwhile: accounts and mail, open tabs, and recent files, whose browser history sends no events
+let activatedAt = Date.now();  // loading counts, init refreshes
+function onActivate() {
+  // Selecting the tab fires both visibilitychange and focus
+  if (document.visibilityState !== 'visible' || Date.now() - activatedAt < 1000) return;
+  activatedAt = Date.now();
   renderClock();
+  renderTabs();
+  renderRecent();
   refresh();
-});
+}
+
+document.addEventListener('visibilitychange', onActivate);
+window.addEventListener('focus', onActivate);
 
 init();
