@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, SERVICE_GROUPS, reconcileGroups, accountServiceUrl, popupOrder, formatDate */
+/* global SERVICE_DEFS, SERVICE_GROUPS, reconcileGroups, accountServiceUrl, popupOrder, formatDate, setPageIcon */
 
 const menuEl = document.getElementById('service-menu');
 
@@ -14,7 +14,7 @@ const sidePanel = new URLSearchParams(location.search).has('sidepanel');
 if (sidePanel) document.body.classList.add('side-panel');
 
 chrome.storage.sync.get(
-  { showPopupTitle: true, popupWidth: 'auto', popupSectionsMode: 'expanded', showMenuTitles: true, showMenuServices: true, showMenuGroups: true, popupSections: {}, popupOrder: null, dashboardTitleFormat: 'auto', groups: null, services: {} },
+  { showPopupTitle: true, popupWidth: 'auto', popupSectionsMode: 'expanded', showMenuTitles: true, showMenuServices: true, showMenuGroups: true, popupSections: {}, popupOrder: null, dashboardTitleFormat: 'auto', dashboardIcon: 'default', groups: null, services: {} },
   (data) => {
     const activeGroups = data.groups ? reconcileGroups(data.groups) : SERVICE_GROUPS;
 
@@ -51,7 +51,10 @@ chrome.storage.sync.get(
 
     // Show/hide sections
     document.querySelector('header').style.display = showTitle ? '' : 'none';
-    if (showTitle) renderTitle(data.dashboardTitleFormat);
+    if (showTitle) {
+      renderTitle(data.dashboardTitleFormat);
+      setPageIcon(document.querySelector('header img'), 32, data.dashboardIcon);
+    }
 
     if (showServices) {
       renderMenu(groups, data.showMenuTitles, data.showMenuGroups);

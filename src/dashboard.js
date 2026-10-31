@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, accountFromUrl, accountServiceUrl, accountKey, orderAccounts, dashboardSections, sectionIcon, formatDate, ACTION_ICONS, drawActionIcon, nextIconChange */
+/* global SERVICE_DEFS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, accountFromUrl, accountServiceUrl, accountKey, orderAccounts, dashboardSections, sectionIcon, formatDate, setPageIcon, renderPageIcon */
 
 const DOCS_KINDS = {
   document:     'docs.google.com',
@@ -1235,33 +1235,6 @@ function renderAll() {
   renderBookmarks();
 }
 
-// The icon in the header and on the browser tab (Options → Dashboard → Icon). The default leaves
-// the tab to Chrome, which shows the extension's icon.
-let pageIcon = 'default';
-let _pageIconTimer = null;
-
-function renderPageIcon() {
-  if (embedded) return;
-  clearTimeout(_pageIconTimer);
-  document.querySelector('link[rel="icon"]')?.remove();
-  const header = document.querySelector('.page-header img');
-  const icon = ACTION_ICONS.find(i => i.id === pageIcon);
-  if (!icon?.draw) {
-    header.src = 'icons/icon.png';
-    return;
-  }
-  const now = new Date();
-  const dataUrl = (size) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = size;
-    drawActionIcon(canvas.getContext('2d'), icon, size, now);
-    return canvas.toDataURL();
-  };
-  header.src = dataUrl(64);
-  document.head.append(Object.assign(document.createElement('link'), { rel: 'icon', href: dataUrl(32) }));
-  if (icon.changes) _pageIconTimer = setTimeout(renderPageIcon, nextIconChange(icon.changes, now) - now);
-}
-
 async function init() {
   renderClock();
   addSectionIcons();
@@ -1270,8 +1243,7 @@ async function init() {
     searchButtons: searchButtons, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', dashboardTabPosition: 'next', dashboardSectionHeight: '420', dashboardPlacement: 'top', dashboardSize: '1200', dashboardIcon: 'default', newTabTitle: '', ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS,
   });
   titleFormat = data.dashboardTitleFormat;
-  pageIcon = data.dashboardIcon;
-  renderPageIcon();
+  if (!embedded) setPageIcon(document.querySelector('.page-header img'), 64, data.dashboardIcon);
   openLinks = data.dashboardOpenLinks;
   tabPosition = data.dashboardTabPosition;
   applySectionHeight(data.dashboardSectionHeight);
@@ -1451,10 +1423,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.stats) renderStats();
   if (area !== 'sync') return;
   if (changes.newTabTitle && isNewTab) document.title = changes.newTabTitle.newValue || NEW_TAB_TITLE;
-  if (changes.dashboardIcon) {
-    pageIcon = changes.dashboardIcon.newValue;
-    renderPageIcon();
-  }
+  if (changes.dashboardIcon && !embedded) setPageIcon(document.querySelector('.page-header img'), 64, changes.dashboardIcon.newValue);
   if (changes.dashboardOpenLinks) openLinks = changes.dashboardOpenLinks.newValue;
   if (changes.dashboardTabPosition) tabPosition = changes.dashboardTabPosition.newValue;
   if (changes.dashboardSectionHeight) applySectionHeight(changes.dashboardSectionHeight.newValue);

@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, SERVICE_GROUPS, reconcileGroups, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate, ACTION_ICONS, drawActionIcon */
+/* global SERVICE_DEFS, SERVICE_GROUPS, reconcileGroups, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate, ACTION_ICONS, DARK_THEME, drawActionIcon */
 
 // Build per-service defaults from shared definitions
 const DEFAULT_SERVICES = Object.fromEntries(
@@ -463,10 +463,12 @@ function renderIconPickers() {
         <span>${label}</span>
       </label>`).join('');
     for (const canvas of picker.querySelectorAll('canvas')) {
-      drawActionIcon(canvas.getContext('2d'), ACTION_ICONS.find(i => i.id === canvas.dataset.icon), pixels, now);
+      drawActionIcon(canvas.getContext('2d'), ACTION_ICONS.find(i => i.id === canvas.dataset.icon), pixels, now, DARK_THEME.matches);
     }
   }
 }
+
+DARK_THEME.addEventListener('change', renderIconPickers);
 
 for (const picker of iconPickers) {
   picker.addEventListener('change', (e) => {

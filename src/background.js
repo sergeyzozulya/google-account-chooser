@@ -278,12 +278,13 @@ const ICON_ALARM = 'icon';
 // corrects the date and time. An icon that shows them gets an alarm for when they next change.
 async function applyToolbarIcon() {
   const { toolbarIcon } = await chrome.storage.sync.get({ toolbarIcon: 'default' });
+  const { darkTheme } = await chrome.storage.local.get({ darkTheme: false });
   const icon = ACTION_ICONS.find(i => i.id === toolbarIcon);
   const now = new Date();
   if (icon?.draw) {
     const imageData = Object.fromEntries([16, 32].map((size) => {
       const ctx = new OffscreenCanvas(size, size).getContext('2d');
-      drawActionIcon(ctx, icon, size, now);
+      drawActionIcon(ctx, icon, size, now, darkTheme);
       return [size, ctx.getImageData(0, 0, size, size)];
     }));
     chrome.action.setIcon({ imageData });
@@ -295,7 +296,7 @@ async function applyToolbarIcon() {
 }
 applyToolbarIcon();
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'sync' && changes.toolbarIcon) applyToolbarIcon();
+  if (area === 'sync' ? changes.toolbarIcon : changes.darkTheme) applyToolbarIcon();
 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ICON_ALARM) applyToolbarIcon();

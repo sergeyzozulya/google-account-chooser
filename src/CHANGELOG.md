@@ -4,7 +4,7 @@
 
 ### Added
 - **Toolbar icon** (Options → General): the default icon, a live icon that shows the date or time (Day, Weekday, Mini date, Clock), or another picture (Launcher, Panels)
-- **Icon** (Options → Dashboard): the same choices, separately, for the icon in the dashboard's header and on its browser tab
+- **Icon** (Options → Dashboard): the same choices, separately, for the icon in the header of the dashboard and the popup and on the dashboard's browser tab
 - **Account** (Options → Open tabs, Options → Recent files): show or hide the account's avatar on each row
 - **Date and time** (Options → Recent files): Off, Time ago (the default), Time or date (the time today, otherwise the date), Date, or Date and time
 
