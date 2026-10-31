@@ -15,8 +15,8 @@ A Chrome extension that automatically routes Google service links through [Accou
 - All signed-in accounts on one panel: photo, email or nickname, Gmail unread count and unread emails, and a launcher that opens any service directly in that account (no Account Chooser); side by side when the section is full width, one per row otherwise
 - Chrome-style bookmarks bar: bar items, nested folder menus, » overflow and Other bookmarks; narrower than full width, a list whose folders open in place
 - Search Google (default on Enter), or Gmail and Drive in a chosen account via split buttons
-- Open tabs: all tabs or only Google services, grouped by window (installed web apps under their own name), by account or not at all, with close buttons and Chrome tab group colors
-- Recent Docs/Sheets/Slides/Forms from browser history, grouped by account or type, filtered by type and period, sorted by last opened or most visited
+- Open tabs: all tabs or only Google services, grouped by window (installed web apps under their own name), by account or not at all, with close buttons, Chrome tab group colors and optional account avatars
+- Recent Docs/Sheets/Slides/Forms from browser history, grouped by account or type, filtered by type and period, sorted by last opened or most visited, with optional account avatars and a choice of date and time formats
 - Statistics of the services and accounts you open through the extension
 - Bookmarks and Recent files need an extra permission, granted with **Turn on** in the section; nothing is requested at install
 - Accounts are detected from your Google session (falling back to Gmail feeds, then a manual count), cached, and refreshed in the background; the dashboard also refreshes when its tab is selected or its window focused
@@ -24,6 +24,7 @@ A Chrome extension that automatically routes Google service links through [Accou
 
 **Popup and side panel**
 - The toolbar button opens a popup (default) or the same content in Chrome's side panel, which stays open (Options → General)
+- The toolbar icon (Options → General) and the dashboard's icon (Options → Dashboard) can each show the date, the time or both, or another picture
 - Options → Popup → **Sections**: the launcher and any dashboard section except Bookmarks, on or off and in any order; **Layout**: all expanded, or an accordion with one section open at a time
 - Arrow keys move through everything: the header buttons, the launcher and every section
 - The popup title is the dashboard title

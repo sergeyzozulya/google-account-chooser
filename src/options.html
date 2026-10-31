@@ -544,6 +544,29 @@
       color: var(--text);
     }
 
+    /* Toolbar icon choices */
+    .card-row.stacked { flex-direction: column; align-items: stretch; gap: 12px; }
+    .icon-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px; }
+
+    .icon-choice {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 4px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      font-size: 12px;
+      text-align: center;
+      color: var(--text-low);
+      cursor: pointer;
+    }
+
+    .icon-choice:hover { background: var(--hover-row); }
+    .icon-choice:has(input:checked) { border-color: var(--accent); color: var(--text); }
+    .icon-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .icon-choice input { position: absolute; opacity: 0; width: 0; height: 0; }
+
     .text-field {
       font-size: 13px;
       color: var(--text);
@@ -693,6 +716,13 @@
           <option value="sidepanel">Side panel</option>
         </select>
       </div>
+      <div class="card-row stacked">
+        <div>
+          <div class="label">Toolbar icon</div>
+          <div class="hint">The extension's icon in the toolbar. The unread count covers its lower corner; turn it off with Options → Gmail → Toolbar icon count.</div>
+        </div>
+        <div class="icon-picker" data-icon-setting="toolbarIcon" data-icon-size="16" role="radiogroup" aria-label="Toolbar icon"></div>
+      </div>
     </div>
 
     <!-- Accounts: order, nicknames, and which ones the dashboard and popup show -->
@@ -752,6 +782,13 @@
           </div>
         </div>
         <input class="text-field" id="title-custom" type="text" spellcheck="false" placeholder="dddd D MMMM · HH:mm">
+      </div>
+      <div class="card-row stacked">
+        <div>
+          <div class="label">Icon</div>
+          <div class="hint">The icon in the dashboard's header and on its browser tab, separate from the toolbar icon (Options → General).</div>
+        </div>
+        <div class="icon-picker" data-icon-setting="dashboardIcon" data-icon-size="32" role="radiogroup" aria-label="Dashboard icon"></div>
       </div>
       <div class="card-row">
         <div>
@@ -968,7 +1005,7 @@
       <div class="card-row">
         <div>
           <div class="label">Grouping</div>
-          <div class="hint">List tabs under each browser window and installed web app (with just one window, in a single list), under each account, or in one list in window order. Unless grouped by account, each tab shows its account's avatar.</div>
+          <div class="hint">List tabs under each browser window and installed web app (with just one window, in a single list), under each account, or in one list in window order.</div>
         </div>
         <select class="select-field" data-panel="tabsGroupBy">
           <option value="window">Group by window</option>
@@ -978,21 +1015,31 @@
       </div>
       <div class="card-row">
         <div>
-          <div class="label">Close buttons</div>
-          <div class="hint">Show × on a tab's row when you point at it, to close the tab from the list (on the dashboard and in the popup).</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" data-panel="tabsClose">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="card-row">
-        <div>
           <div class="label">Tab groups</div>
           <div class="hint">Mark tabs in a Chrome tab group with a strip of the group's color; point at a tab to see the group's name.</div>
         </div>
         <label class="switch">
           <input type="checkbox" data-panel="tabsGroupColors">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Account</div>
+          <div class="hint">Show the account's avatar on each tab's row. Tabs grouped by account are listed under it instead.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" data-panel="tabsAccount">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Close buttons</div>
+          <div class="hint">Show × on a tab's row when you point at it, to close the tab from the list (on the dashboard and in the popup).</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" data-panel="tabsClose">
           <span class="slider"></span>
         </label>
       </div>
@@ -1011,17 +1058,6 @@
           <option value="5">5</option>
           <option value="10">10</option>
           <option value="20">20</option>
-        </select>
-      </div>
-      <div class="card-row">
-        <div>
-          <div class="label">Grouping</div>
-          <div class="hint">List files under each account, under each type (Docs, Sheets, Slides, Forms), or in one list. Unless grouped by account, each file shows its account's avatar.</div>
-        </div>
-        <select class="select-field" data-panel="recentGroupBy">
-          <option value="account">Group by account</option>
-          <option value="type">Group by type</option>
-          <option value="none">No group</option>
         </select>
       </div>
       <div class="card-row">
@@ -1050,12 +1086,46 @@
       </div>
       <div class="card-row">
         <div>
+          <div class="label">Grouping</div>
+          <div class="hint">List files under each account, under each type (Docs, Sheets, Slides, Forms), or in one list.</div>
+        </div>
+        <select class="select-field" data-panel="recentGroupBy">
+          <option value="account">Group by account</option>
+          <option value="type">Group by type</option>
+          <option value="none">No group</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
           <div class="label">Sort</div>
           <div class="hint">Most visited counts every visit to a file in your browser history.</div>
         </div>
         <select class="select-field" data-panel="recentSort">
           <option value="recent">Last opened</option>
           <option value="visits">Most visited</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Account</div>
+          <div class="hint">Show the account's avatar on each file's row. Files grouped by account are listed under it instead.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" data-panel="recentAccount">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Date and time</div>
+          <div class="hint">When each file was last opened. Time or date: the time today, otherwise the date.</div>
+        </div>
+        <select class="select-field" data-panel="recentTime">
+          <option value="off">Off</option>
+          <option value="relative">Time ago</option>
+          <option value="time-or-date">Time or date</option>
+          <option value="D MMM">Date</option>
+          <option value="D MMM HH:mm">Date and time</option>
         </select>
       </div>
     </div>
@@ -1143,6 +1213,7 @@
   <div id="toast">Settings saved</div>
 
   <script src="services-data.js"></script>
+  <script src="action-icon.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

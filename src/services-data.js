@@ -155,8 +155,11 @@ const PANEL_DEFAULTS = {
   tabsGroupBy: 'window',   // tabs listed under each 'window' or 'account', or in one list ('none')
   tabsClose: true,         // × on each tab row closes the tab
   tabsGroupColors: true,   // a strip in the color of the tab's Chrome tab group
+  tabsAccount: true,       // each tab's account avatar, unless tabs are grouped by account
   recentPerAccount: 5,     // files listed per group, or in all when not grouped
   recentGroupBy: 'account', // files listed under each 'account' or 'type', or in one list ('none')
+  recentAccount: true,     // each file's account avatar, unless files are grouped by account
+  recentTime: 'relative',  // when each file was opened: 'off', 'relative', 'time-or-date' (time today, otherwise the date), or a formatDate format
   recentDocs: true,        // file types listed
   recentSheets: true,
   recentSlides: true,

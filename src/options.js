@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, SERVICE_GROUPS, reconcileGroups, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate */
+/* global SERVICE_DEFS, SERVICE_GROUPS, reconcileGroups, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate, ACTION_ICONS, drawActionIcon */
 
 // Build per-service defaults from shared definitions
 const DEFAULT_SERVICES = Object.fromEntries(
@@ -13,6 +13,8 @@ let state = {
   dashboardNewTab: false,
   newTabTitle: '',
   actionOpens: 'popup',   // toolbar icon: 'popup' or 'sidepanel'
+  toolbarIcon: 'default', // one of ACTION_ICONS
+  dashboardIcon: 'default', // one of ACTION_ICONS
   popupPlacement: 'center',
   popupSize: 'custom',
   showPopupTitle: true,
@@ -59,6 +61,8 @@ function save() {
     dashboardNewTab: state.dashboardNewTab,
     newTabTitle: state.newTabTitle,
     actionOpens: state.actionOpens,
+    toolbarIcon: state.toolbarIcon,
+    dashboardIcon: state.dashboardIcon,
     popupPlacement: state.popupPlacement,
     popupSize: state.popupSize,
     showPopupTitle: state.showPopupTitle,
@@ -441,6 +445,35 @@ document.getElementById('action-opens').addEventListener('change', (e) => {
   state.actionOpens = e.target.value;
   save();
 });
+
+// Toolbar and dashboard icons (data-icon-setting="setting"): each choice as it looks now, at the
+// size it shows there (data-icon-size) and in whole pixels of the screen, as Chrome draws the toolbar
+const iconPickers = document.querySelectorAll('[data-icon-setting]');
+
+function renderIconPickers() {
+  const now = new Date();
+  for (const picker of iconPickers) {
+    const key = picker.dataset.iconSetting;
+    const size = Number(picker.dataset.iconSize);
+    const pixels = size * Math.ceil(devicePixelRatio);
+    picker.innerHTML = ACTION_ICONS.map(({ id, label, draw }) => `
+      <label class="icon-choice">
+        <input type="radio" name="${key}" value="${id}" ${id === state[key] ? 'checked' : ''}>
+        ${draw ? `<canvas data-icon="${id}" width="${pixels}" height="${pixels}" style="width:${size}px;height:${size}px"></canvas>` : `<img src="icons/icon.png" width="${size}" height="${size}" alt="">`}
+        <span>${label}</span>
+      </label>`).join('');
+    for (const canvas of picker.querySelectorAll('canvas')) {
+      drawActionIcon(canvas.getContext('2d'), ACTION_ICONS.find(i => i.id === canvas.dataset.icon), pixels, now);
+    }
+  }
+}
+
+for (const picker of iconPickers) {
+  picker.addEventListener('change', (e) => {
+    state[picker.dataset.iconSetting] = e.target.value;
+    save();
+  });
+}
 
 // Saved on Enter or leaving the field; empty means Chrome's own "New tab"
 document.getElementById('new-tab-title').addEventListener('change', (e) => {
@@ -864,12 +897,14 @@ showTab(location.hash.slice(1));
 // ── Init ───────────────────────────────────────────────────────────────────
 
 chrome.storage.sync.get(
-  { enabled: true, dashboardNewTab: false, newTabTitle: '', actionOpens: 'popup', popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, popupWidth: 'auto', popupSectionsMode: 'expanded', showMenuTitles: true, showMenuServices: true, showMenuGroups: true, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', dashboardTabPosition: 'next', dashboardSectionHeight: '420', dashboardPlacement: 'top', dashboardSize: '1200', ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS, popupSections: {}, popupOrder: null, searchButtons: {}, dashboardSections: null, accountOrder: [], accountLabels: {}, hiddenAccounts: [], manualAccountCount: 1, groups: null, services: {} },
+  { enabled: true, dashboardNewTab: false, newTabTitle: '', actionOpens: 'popup', toolbarIcon: 'default', dashboardIcon: 'default', popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, popupWidth: 'auto', popupSectionsMode: 'expanded', showMenuTitles: true, showMenuServices: true, showMenuGroups: true, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', dashboardTabPosition: 'next', dashboardSectionHeight: '420', dashboardPlacement: 'top', dashboardSize: '1200', ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS, popupSections: {}, popupOrder: null, searchButtons: {}, dashboardSections: null, accountOrder: [], accountLabels: {}, hiddenAccounts: [], manualAccountCount: 1, groups: null, services: {} },
   (data) => {
     state.enabled = data.enabled;
     state.dashboardNewTab = data.dashboardNewTab;
     state.newTabTitle = data.newTabTitle;
     state.actionOpens = data.actionOpens;
+    state.toolbarIcon = data.toolbarIcon;
+    state.dashboardIcon = data.dashboardIcon;
     state.popupPlacement = data.popupPlacement;
     state.popupSize = data.popupSize;
     state.showPopupTitle = data.showPopupTitle;
@@ -913,6 +948,7 @@ chrome.storage.sync.get(
     document.getElementById('new-tab-title').value = state.newTabTitle;
     document.getElementById('action-opens').value = state.actionOpens;
     document.getElementById('new-tab-title').disabled = !state.dashboardNewTab;
+    renderIconPickers();
     document.getElementById('popup-placement').value = state.popupPlacement;
     document.getElementById('popup-size').value = state.popupSize;
     document.getElementById('show-popup-title').checked = state.showPopupTitle;

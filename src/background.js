@@ -1,5 +1,5 @@
-importScripts('services-data.js');
-/* global SERVICE_DEFS, GMAIL_DEFAULTS, accountFromUrl, accountKey */
+importScripts('services-data.js', 'action-icon.js');
+/* global SERVICE_DEFS, GMAIL_DEFAULTS, accountFromUrl, accountKey, ACTION_ICONS, drawActionIcon, nextIconChange */
 
 // Build the intercept lookup from the shared service definitions
 const DEFAULT_SERVICES = Object.fromEntries(
@@ -269,6 +269,37 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   refreshUnread();
 });
 chrome.runtime.onStartup.addListener(refreshUnread);
+
+// ── Toolbar icon (Options → General) ───────────────────────────────────────
+
+const ICON_ALARM = 'icon';
+
+// Runs each time the worker starts, as Chrome forgets a set icon when it restarts, and that also
+// corrects the date and time. An icon that shows them gets an alarm for when they next change.
+async function applyToolbarIcon() {
+  const { toolbarIcon } = await chrome.storage.sync.get({ toolbarIcon: 'default' });
+  const icon = ACTION_ICONS.find(i => i.id === toolbarIcon);
+  const now = new Date();
+  if (icon?.draw) {
+    const imageData = Object.fromEntries([16, 32].map((size) => {
+      const ctx = new OffscreenCanvas(size, size).getContext('2d');
+      drawActionIcon(ctx, icon, size, now);
+      return [size, ctx.getImageData(0, 0, size, size)];
+    }));
+    chrome.action.setIcon({ imageData });
+  } else {
+    chrome.action.setIcon({ path: chrome.runtime.getManifest().action.default_icon });
+  }
+  if (icon?.changes) chrome.alarms.create(ICON_ALARM, { when: nextIconChange(icon.changes, now) });
+  else chrome.alarms.clear(ICON_ALARM);
+}
+applyToolbarIcon();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && changes.toolbarIcon) applyToolbarIcon();
+});
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === ICON_ALARM) applyToolbarIcon();
+});
 
 // ── What's new ─────────────────────────────────────────────────────────────
 

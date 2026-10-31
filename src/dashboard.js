@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, accountFromUrl, accountServiceUrl, accountKey, orderAccounts, dashboardSections, sectionIcon, formatDate */
+/* global SERVICE_DEFS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, accountFromUrl, accountServiceUrl, accountKey, orderAccounts, dashboardSections, sectionIcon, formatDate, ACTION_ICONS, drawActionIcon, nextIconChange */
 
 const DOCS_KINDS = {
   document:     'docs.google.com',
@@ -890,7 +890,7 @@ async function renderTabs() {
         title="${esc(group?.title ? `${group.title}\n${t.url}` : t.url)}">
         ${service ? SERVICE_DEFS[service].icon : tabIcon(t)}
         <span class="title">${esc(t.title || t.url)}</span>
-        ${panelSettings.tabsGroupBy === 'account' ? '' : rowAccount(accountOf(t))}
+        ${panelSettings.tabsAccount && panelSettings.tabsGroupBy !== 'account' ? rowAccount(accountOf(t)) : ''}
         ${panelSettings.tabsClose ? `<span class="close" data-close-tab="${t.id}" title="Close tab">${SVG_CLOSE}</span>` : ''}
       </button>`;
   };
@@ -937,6 +937,13 @@ function relativeTime(ms) {
   if (minutes < 60) return `${Math.max(minutes, 1)}m`;
   if (minutes < 1440) return `${Math.round(minutes / 60)}h`;
   return `${Math.round(minutes / 1440)}d`;
+}
+
+// Options → Recent files → Date and time
+function recentTime(ms) {
+  if (panelSettings.recentTime === 'relative') return relativeTime(ms);
+  if (panelSettings.recentTime === 'time-or-date') return mailDate(ms);
+  return formatDate(new Date(ms), panelSettings.recentTime);
 }
 
 async function renderRecent() {
@@ -996,8 +1003,8 @@ async function renderRecent() {
     <button class="row" data-url="${esc(f.url)}" data-service="${f.service}" title="${esc(f.url)}">
       ${SERVICE_DEFS[f.service].icon}
       <span class="title">${esc((f.title || f.url).replace(/ - Google (Docs|Sheets|Slides|Forms)$/, ''))}</span>
-      ${panelSettings.recentGroupBy === 'account' ? '' : rowAccount(accountOf(f))}
-      <span class="meta">${relativeTime(f.lastVisitTime)}</span>
+      ${panelSettings.recentAccount && panelSettings.recentGroupBy !== 'account' ? rowAccount(accountOf(f)) : ''}
+      ${panelSettings.recentTime === 'off' ? '' : `<span class="meta">${esc(recentTime(f.lastVisitTime))}</span>`}
     </button>`;
   const limit = panelSettings.recentPerAccount;
   if (panelSettings.recentGroupBy === 'account') {
@@ -1228,14 +1235,43 @@ function renderAll() {
   renderBookmarks();
 }
 
+// The icon in the header and on the browser tab (Options → Dashboard → Icon). The default leaves
+// the tab to Chrome, which shows the extension's icon.
+let pageIcon = 'default';
+let _pageIconTimer = null;
+
+function renderPageIcon() {
+  if (embedded) return;
+  clearTimeout(_pageIconTimer);
+  document.querySelector('link[rel="icon"]')?.remove();
+  const header = document.querySelector('.page-header img');
+  const icon = ACTION_ICONS.find(i => i.id === pageIcon);
+  if (!icon?.draw) {
+    header.src = 'icons/icon.png';
+    return;
+  }
+  const now = new Date();
+  const dataUrl = (size) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    drawActionIcon(canvas.getContext('2d'), icon, size, now);
+    return canvas.toDataURL();
+  };
+  header.src = dataUrl(64);
+  document.head.append(Object.assign(document.createElement('link'), { rel: 'icon', href: dataUrl(32) }));
+  if (icon.changes) _pageIconTimer = setTimeout(renderPageIcon, nextIconChange(icon.changes, now) - now);
+}
+
 async function init() {
   renderClock();
   addSectionIcons();
   const data = await chrome.storage.sync.get({
     accountLabels: {}, accountOrder: [], hiddenAccounts: [], manualAccountCount: 1, dashboardSections: null,
-    searchButtons: searchButtons, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', dashboardTabPosition: 'next', dashboardSectionHeight: '420', dashboardPlacement: 'top', dashboardSize: '1200', newTabTitle: '', ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS,
+    searchButtons: searchButtons, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', dashboardTabPosition: 'next', dashboardSectionHeight: '420', dashboardPlacement: 'top', dashboardSize: '1200', dashboardIcon: 'default', newTabTitle: '', ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS,
   });
   titleFormat = data.dashboardTitleFormat;
+  pageIcon = data.dashboardIcon;
+  renderPageIcon();
   openLinks = data.dashboardOpenLinks;
   tabPosition = data.dashboardTabPosition;
   applySectionHeight(data.dashboardSectionHeight);
@@ -1415,6 +1451,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.stats) renderStats();
   if (area !== 'sync') return;
   if (changes.newTabTitle && isNewTab) document.title = changes.newTabTitle.newValue || NEW_TAB_TITLE;
+  if (changes.dashboardIcon) {
+    pageIcon = changes.dashboardIcon.newValue;
+    renderPageIcon();
+  }
   if (changes.dashboardOpenLinks) openLinks = changes.dashboardOpenLinks.newValue;
   if (changes.dashboardTabPosition) tabPosition = changes.dashboardTabPosition.newValue;
   if (changes.dashboardSectionHeight) applySectionHeight(changes.dashboardSectionHeight.newValue);
@@ -1468,6 +1508,7 @@ function onActivate() {
   if (document.visibilityState !== 'visible' || Date.now() - activatedAt < 1000) return;
   activatedAt = Date.now();
   renderClock();
+  renderPageIcon();
   renderTabs();
   renderRecent();
   refresh();
