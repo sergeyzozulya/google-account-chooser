@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.4.0] — 2026-11-02
+
+### Added
+- **Most visited**: a new dashboard section, also available in the popup, listing the sites Chrome shows on its New Tab page. **Options → Most visited**: Icons (Large, Small (row), or Small (col), the default), Text (show or hide site names) and Sites listed (5, 10, 15 or 20; default 10). Turn it on in the section; it requests the optional `topSites` and `favicon` permissions
+- **Edit** in Most visited: add a site by its address, remove and pin sites, and drag them into any order; Chrome's own list isn't changed
+- **Edit** in Recent files: pin a file to keep it on top, whatever the grouping, file types or period, and after Clear; drag pinned files into any order; remove a file until you open it again
+- **Edit** in Statistics: remove a service or account until it's opened again; Reset, which sets all counts back to zero, moved here
+- **Reset** in edit mode undoes that section's changes, after you confirm it
+- With a section's title off, a small edit button in the top right opens Edit
+
+### Changed
+- Open tabs, Recent files, Most visited and Statistics default to half width instead of one third; saved layouts are kept
+- Options: the Interface tab is split into its own tabs: Dashboard, Popup, Search, Gmail, Open tabs, Recent files, Most visited and Launcher
+- Icon choices (Day, Weekday, Mini date, Clock, Launcher, Panels) use the color of the dashboard's title, in the toolbar too
+- **Toolbar icon opens** and **Toolbar icon** moved from Options → General to Options → Popup
+
+---
+
 ## [2.3.1] — 2026-10-31
 
 ### Added

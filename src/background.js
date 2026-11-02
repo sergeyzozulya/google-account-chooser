@@ -47,7 +47,7 @@ function openWithAccount(url, tabId) {
   }
 }
 
-// Toolbar icon (Options → General): the popup, or the same page in Chrome's side panel.
+// Toolbar icon (Options → Popup): the popup, or the same page in Chrome's side panel.
 // The side panel only opens on click when the action has no popup.
 function applyActionOpens(mode) {
   const sidePanel = mode === 'sidepanel';
@@ -270,7 +270,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 });
 chrome.runtime.onStartup.addListener(refreshUnread);
 
-// ── Toolbar icon (Options → General) ───────────────────────────────────────
+// ── Toolbar icon (Options → Popup) ─────────────────────────────────────────
 
 const ICON_ALARM = 'icon';
 

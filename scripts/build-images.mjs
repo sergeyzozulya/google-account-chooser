@@ -146,7 +146,7 @@ async function capture(url, { width, height, scale = 1, transparent = false, ful
 // take the most even one, so no column is left nearly empty. Cards taller than TEAR_OVER
 // (the services table) show their top and bottom with a torn-paper gap in between.
 // Returns columns as lists of { png, torn } segments; `torn` means a tear follows it.
-// Options' tabs (General, Interface, Services) all showing, one after another, without the tab bar
+// Options' tabs all showing, one after another, without the tab bar
 const ALL_OPTION_TABS = `(document.querySelectorAll('.tab-panel').forEach(p => { p.hidden = false; }),
   document.querySelector('.tabs').hidden = true)`;
 

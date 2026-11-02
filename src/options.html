@@ -114,6 +114,7 @@
     /* Tabs: General, Interface, Services */
     .tabs {
       display: flex;
+      flex-wrap: wrap;
       gap: 4px;
       margin: -8px 0 24px;
       border-bottom: 1px solid var(--border);
@@ -670,7 +671,14 @@
 
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="general">General</button>
-      <button role="tab" data-tab="interface">Interface</button>
+      <button role="tab" data-tab="dashboard">Dashboard</button>
+      <button role="tab" data-tab="popup">Popup</button>
+      <button role="tab" data-tab="search">Search</button>
+      <button role="tab" data-tab="gmail">Gmail</button>
+      <button role="tab" data-tab="open-tabs">Open tabs</button>
+      <button role="tab" data-tab="recent-files">Recent files</button>
+      <button role="tab" data-tab="most-visited">Most visited</button>
+      <button role="tab" data-tab="launcher">Launcher</button>
       <button role="tab" data-tab="services">Services</button>
     </nav>
 
@@ -706,23 +714,6 @@
         </div>
         <input class="text-field" id="new-tab-title" type="text" placeholder="New tab">
       </div>
-      <div class="card-row">
-        <div>
-          <div class="label">Toolbar icon opens</div>
-          <div class="hint">Popup closes after you open something; the side panel stays open next to your tabs.</div>
-        </div>
-        <select class="select-field" id="action-opens">
-          <option value="popup">Popup</option>
-          <option value="sidepanel">Side panel</option>
-        </select>
-      </div>
-      <div class="card-row stacked">
-        <div>
-          <div class="label">Toolbar icon</div>
-          <div class="hint">The extension's icon in the toolbar. The unread count covers its lower corner; turn it off with Options → Gmail → Toolbar icon count.</div>
-        </div>
-        <div class="icon-picker" data-icon-setting="toolbarIcon" data-icon-size="16" role="radiogroup" aria-label="Toolbar icon"></div>
-      </div>
     </div>
 
     <!-- Accounts: order, nicknames, and which ones the dashboard and popup show -->
@@ -735,7 +726,7 @@
 
     </div>
 
-    <div class="tab-panel" id="tab-interface" hidden>
+    <div class="tab-panel" id="tab-dashboard" hidden>
     <!-- Dashboard -->
     <div class="card">
       <div class="card-header"><h2>Dashboard</h2></div>
@@ -786,7 +777,7 @@
       <div class="card-row stacked">
         <div>
           <div class="label">Icon</div>
-          <div class="hint">The icon in the header of the dashboard and the popup and on the dashboard's browser tab, separate from the toolbar icon (Options → General).</div>
+          <div class="hint">The icon in the header of the dashboard and the popup and on the dashboard's browser tab, separate from the toolbar icon (Options → Popup).</div>
         </div>
         <div class="icon-picker" data-icon-setting="dashboardIcon" data-icon-size="32" role="radiogroup" aria-label="Dashboard icon"></div>
       </div>
@@ -814,7 +805,7 @@
       <div class="card-row">
         <div>
           <div class="label">Section height</div>
-          <div class="hint">How tall Open tabs, Recent files and Statistics grow before they scroll; Auto shows them in full. The popup always shows them in full.</div>
+          <div class="hint">How tall Open tabs, Recent files, Most visited and Statistics grow before they scroll; Auto shows them in full. The popup always shows them in full.</div>
         </div>
         <select class="select-field" id="dashboard-section-height">
           <option value="auto">Auto</option>
@@ -826,9 +817,29 @@
       </div>
     </div>
 
+    </div>
+
+    <div class="tab-panel" id="tab-popup" hidden>
     <!-- Popup (the extension's toolbar popup) -->
     <div class="card">
       <div class="card-header"><h2>Popup</h2></div>
+      <div class="card-row">
+        <div>
+          <div class="label">Toolbar icon opens</div>
+          <div class="hint">Popup closes after you open something; the side panel stays open next to your tabs.</div>
+        </div>
+        <select class="select-field" id="action-opens">
+          <option value="popup">Popup</option>
+          <option value="sidepanel">Side panel</option>
+        </select>
+      </div>
+      <div class="card-row stacked">
+        <div>
+          <div class="label">Toolbar icon</div>
+          <div class="hint">The extension's icon in the toolbar. The unread count covers its lower corner; turn it off with Options → Gmail → Toolbar icon count.</div>
+        </div>
+        <div class="icon-picker" data-icon-setting="toolbarIcon" data-icon-size="16" role="radiogroup" aria-label="Toolbar icon"></div>
+      </div>
       <!-- What the toolbar popup shows; everything but the launcher comes from the dashboard -->
       <div class="settings-table">
         <div class="table-group"><span>Sections</span></div>
@@ -870,6 +881,9 @@
       </div>
     </div>
 
+    </div>
+
+    <div class="tab-panel" id="tab-search" hidden>
     <!-- Search (dashboard section, also in the popup) -->
     <div class="card">
       <div class="card-header"><h2>Search</h2></div>
@@ -886,6 +900,9 @@
       </div>
     </div>
 
+    </div>
+
+    <div class="tab-panel" id="tab-gmail" hidden>
     <!-- Gmail -->
     <div class="card">
       <div class="card-header"><h2>Gmail</h2></div>
@@ -989,6 +1006,9 @@
       </div>
     </div>
 
+    </div>
+
+    <div class="tab-panel" id="tab-open-tabs" hidden>
     <!-- Open tabs (dashboard section, also in the popup) -->
     <div class="card">
       <div class="card-header"><h2>Open tabs</h2></div>
@@ -1045,13 +1065,16 @@
       </div>
     </div>
 
+    </div>
+
+    <div class="tab-panel" id="tab-recent-files" hidden>
     <!-- Recent files (dashboard section, also in the popup) -->
     <div class="card">
       <div class="card-header"><h2>Recent files</h2></div>
       <div class="card-row">
         <div>
           <div class="label">Files listed</div>
-          <div class="hint">How many files each group lists (each account or type), or the whole list when not grouped.</div>
+          <div class="hint">How many files each group lists (each account or type), or the whole list when not grouped. Pinned files count towards this, and always show, whatever the settings here.</div>
         </div>
         <select class="select-field" data-panel="recentPerAccount">
           <option value="3">3</option>
@@ -1130,6 +1153,50 @@
       </div>
     </div>
 
+    </div>
+
+    <div class="tab-panel" id="tab-most-visited" hidden>
+    <!-- Most visited (dashboard section, also in the popup) -->
+    <div class="card">
+      <div class="card-header"><h2>Most visited</h2></div>
+      <div class="card-row">
+        <div>
+          <div class="label">Icons</div>
+          <div class="hint">Small icons have the name on the right, in a row or a column. Large icons have it underneath.</div>
+        </div>
+        <select class="select-field" data-panel="visitedIcons">
+          <option value="large">Large</option>
+          <option value="small-row">Small (row)</option>
+          <option value="small-col">Small (col)</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Text</div>
+          <div class="hint">Show each site's name. Turned off, the name appears when you point at the icon.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" data-panel="visitedText">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Sites listed</div>
+          <div class="hint">At most this many. Pinned sites count towards this, and always show. Fewer show when Chrome's list is shorter.</div>
+        </div>
+        <select class="select-field" data-panel="visitedCount">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="15">15</option>
+          <option value="20">20</option>
+        </select>
+      </div>
+    </div>
+
+    </div>
+
+    <div class="tab-panel" id="tab-launcher" hidden>
     <!-- Launcher -->
     <div class="card">
       <div class="card-header"><h2>Launcher</h2></div>

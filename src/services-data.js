@@ -149,7 +149,7 @@ const GMAIL_DEFAULTS = {
   toolbarBadge: 'all',     // toolbar icon count: 'off', 'all', or one account's accountKey
 };
 
-// Options → Open tabs and Options → Recent files
+// Options → Open tabs, Options → Recent files and Options → Most visited
 const PANEL_DEFAULTS = {
   tabsScope: 'all',        // tabs listed: 'all' or only 'google' services
   tabsGroupBy: 'window',   // tabs listed under each 'window' or 'account', or in one list ('none')
@@ -166,6 +166,9 @@ const PANEL_DEFAULTS = {
   recentForms: true,
   recentDays: 30,          // files opened in the last 1, 7, 30 or 90 days
   recentSort: 'recent',    // 'recent' (last opened first) or 'visits' (most visited first)
+  visitedIcons: 'small-col', // 'large' (name under the icon), or small with the name on the right, in a 'small-col' or a 'small-row'
+  visitedText: true,       // each site's name; off lists icons only
+  visitedCount: 10,        // sites listed, at most
 };
 
 // Dashboard sections in default order; width is a share of the page row
@@ -174,9 +177,10 @@ const DASHBOARD_SECTIONS = [
   { id: 'bookmarks', label: 'Bookmarks',   visible: true, width: 'full', popup: false },
   { id: 'search',   label: 'Search',       visible: true, width: 'full'  },
   { id: 'accounts', label: 'Accounts',     visible: true, width: 'full'  },
-  { id: 'tabs',     label: 'Open tabs',    visible: true, width: 'third' },
-  { id: 'recent',   label: 'Recent files', visible: true, width: 'third' },
-  { id: 'stats',    label: 'Statistics',   visible: true, width: 'third' },
+  { id: 'tabs',     label: 'Open tabs',    visible: true, width: 'half' },
+  { id: 'recent',   label: 'Recent files', visible: true, width: 'half' },
+  { id: 'visited',  label: 'Most visited', visible: true, width: 'half' },
+  { id: 'stats',    label: 'Statistics',   visible: true, width: 'half' },
 ];
 
 // Toolbar popup layout: the launcher plus any dashboard sections, in saved order
@@ -194,6 +198,7 @@ const SECTION_ICON_PATHS = {
   tabs:     '<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="4" x2="9" y2="9"/>',
   bookmarks: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
   recent:   '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/>',
+  visited:  '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
   stats:    '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
 };
 

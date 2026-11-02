@@ -30,8 +30,8 @@ let state = {
   dashboardPlacement: 'top', // dashboard in its tab: at the 'top' or vertically 'center'ed
   dashboardSize: '1200',  // dashboard's widest width in px as a string, or 'full'
   ...GMAIL_DEFAULTS,      // Options → Gmail
-  ...PANEL_DEFAULTS,      // Options → Open tabs, Recent files
-  popupSections: { search: false, accounts: false, tabs: false, recent: false, stats: false },
+  ...PANEL_DEFAULTS,      // Options → Open tabs, Recent files, Most visited
+  popupSections: { search: false, accounts: false, tabs: false, recent: false, visited: false, stats: false },
   popupOrder: [],        // launcher + dashboard section ids, in popup order
   searchButtons: { google: true, gmail: true, drive: true },
   dashboardSections: [], // [{ id, label, visible, width }] in display order
@@ -576,7 +576,7 @@ document.getElementById('dashboard-size').addEventListener('change', (e) => {
   save();
 });
 
-// Options → Gmail, Open tabs and Recent files: each control (data-gmail="setting" or
+// Options → Gmail, Open tabs, Recent files and Most visited: each control (data-gmail="setting" or
 // data-panel="setting") saves its setting; numbers stay numbers
 const SETTING_CONTROLS = [['gmail', GMAIL_DEFAULTS], ['panel', PANEL_DEFAULTS]];
 
@@ -879,7 +879,7 @@ document.getElementById('service-list').addEventListener('change', (e) => {
 // ── Tabs ───────────────────────────────────────────────────────────────────
 
 // The selected tab is in the URL hash, so reloading or a link (options.html#services) keeps it
-const TABS = ['general', 'interface', 'services'];
+const TABS = ['general', 'dashboard', 'popup', 'search', 'gmail', 'open-tabs', 'recent-files', 'most-visited', 'launcher', 'services'];
 
 function showTab(id) {
   if (!TABS.includes(id)) id = TABS[0];

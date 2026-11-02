@@ -8,7 +8,7 @@ const account = new URLSearchParams(location.search).get('account');
 const toDashboard = (msg) => parent.postMessage(msg, location.origin);
 if (account !== null) document.body.classList.add('account-mode');
 
-// popup.html?sidepanel is shown in Chrome's side panel (Options → General → Toolbar icon opens):
+// popup.html?sidepanel is shown in Chrome's side panel (Options → Popup → Toolbar icon opens):
 // it fills the panel's width and stays open after something is opened
 const sidePanel = new URLSearchParams(location.search).has('sidepanel');
 if (sidePanel) document.body.classList.add('side-panel');

@@ -1,4 +1,4 @@
-// Icon choices for the toolbar (Options → General) and the dashboard (Options → Dashboard), shared by
+// Icon choices for the toolbar (Options → Popup) and the dashboard (Options → Dashboard), shared by
 // the background worker and the extension's pages. Drawn on a canvas in a 128×128 box: the worker
 // can't load SVG files, and the date and time are drawn anyway.
 // changes: what the icon shows that goes out of date, 'minute' or 'day'. No draw: the manifest's icon.
@@ -6,7 +6,7 @@
 // In a page, whether it's in the dark theme; the worker has no matchMedia
 const DARK_THEME = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
 
-// Ink as the header buttons (--text-low in the pages), on paper for text and faces
+// Ink as the title in the header (--text in the pages), on paper for text and faces
 let iconInk, iconPaper;
 
 const ACTION_ICONS = [
@@ -20,7 +20,7 @@ const ACTION_ICONS = [
 ];
 
 function drawActionIcon(ctx, icon, size, now, dark) {
-  iconInk = dark ? '#9aa0a6' : '#5f6368';
+  iconInk = dark ? '#e8eaed' : '#202124';
   iconPaper = dark ? '#202124' : '#fff';
   ctx.clearRect(0, 0, size, size);
   ctx.save();

@@ -16,15 +16,16 @@ A Chrome extension that automatically routes Google service links through [Accou
 - Chrome-style bookmarks bar: bar items, nested folder menus, » overflow and Other bookmarks; narrower than full width, a list whose folders open in place
 - Search Google (default on Enter), or Gmail and Drive in a chosen account via split buttons
 - Open tabs: all tabs or only Google services, grouped by window (installed web apps under their own name), by account or not at all, with close buttons, Chrome tab group colors and optional account avatars
-- Recent Docs/Sheets/Slides/Forms from browser history, grouped by account or type, filtered by type and period, sorted by last opened or most visited, with optional account avatars and a choice of date and time formats
+- Recent Docs/Sheets/Slides/Forms from browser history, grouped by account or type, filtered by type and period, sorted by last opened or most visited, with optional account avatars and a choice of date and time formats; Edit removes files, pins them on top and re-orders pinned ones
+- Most visited: the sites Chrome lists on its New Tab page, with large icons or small ones in a row or a column, with or without names, and a choice of how many to list; Edit adds sites by address, and removes, pins and re-orders them
 - Statistics of the services and accounts you open through the extension
-- Bookmarks and Recent files need an extra permission, granted with **Turn on** in the section; nothing is requested at install
+- Bookmarks, Recent files and Most visited need an extra permission, granted with **Turn on** in the section; nothing is requested at install
 - Accounts are detected from your Google session (falling back to Gmail feeds, then a manual count), cached, and refreshed in the background; the dashboard also refreshes when its tab is selected or its window focused
 - Optionally replaces Chrome's New Tab page (Options → General), with an editable tab title
 
 **Popup and side panel**
-- The toolbar button opens a popup (default) or the same content in Chrome's side panel, which stays open (Options → General)
-- The toolbar icon (Options → General) and the dashboard's icon (Options → Dashboard) can each show the date, the time or both, or another picture
+- The toolbar button opens a popup (default) or the same content in Chrome's side panel, which stays open (Options → Popup)
+- The toolbar icon (Options → Popup) and the dashboard's icon (Options → Dashboard) can each show the date, the time or both, or another picture
 - Options → Popup → **Sections**: the launcher and any dashboard section except Bookmarks, on or off and in any order; **Layout**: all expanded, or an accordion with one section open at a time
 - Arrow keys move through everything: the header buttons, the launcher and every section
 - The popup title is the dashboard title
@@ -38,9 +39,9 @@ A Chrome extension that automatically routes Google service links through [Accou
 
 **Customization**
 - Options → General → Accounts: order (drag and drop), nicknames, and which accounts show
-- Options → Interface → Dashboard: section order (drag and drop), width, visibility and title; header title (date-and-time presets, static text or a custom format); where links and new tabs open; placement, size and section height
-- Options → Interface → Search: which search buttons show
-- Options → Interface → Popup, Gmail, Open tabs, Recent files and Launcher: the options above
+- Options → Dashboard: section order (drag and drop), width, visibility and title; header title (date-and-time presets, static text or a custom format); where links and new tabs open; placement, size and section height
+- Options → Search: which search buttons show
+- Options → Popup, Gmail, Open tabs, Recent files, Most visited and Launcher: the options above
 
 ## Supported Services
 
@@ -97,7 +98,7 @@ Requires Node 22+ and Google Chrome (set `CHROME=/path/to/chrome` if it isn't in
 Once installed, clicking a link to a supported Google service shows Account Chooser first. From the toolbar button you can:
 
 - Launch any service (through Account Chooser)
-- See the sections you added to the popup: accounts with unread mail and per-account launchers, search, open tabs, recent files, statistics
+- See the sections you added to the popup: accounts with unread mail and per-account launchers, search, open tabs, recent files, most visited, statistics
 - Open the dashboard or the Options page
 
 ### Options Page
@@ -129,7 +130,7 @@ Everything runs in your browser. The extension doesn't ask you to sign in and do
 | `alarms` | Refreshing the unread badge |
 | `declarativeNetRequestWithHostAccess` | Removing the extension's Origin header from Google's account-list request, which Google otherwise rejects |
 | `sidePanel` | Showing the popup in Chrome's side panel |
-| `history`, `bookmarks`, `favicon` (optional) | Recent files and the bookmarks bar, requested only when you turn them on |
+| `history`, `bookmarks`, `topSites`, `favicon` (optional) | Recent files, the bookmarks bar and Most visited, requested only when you turn them on |
 | Host permissions (`accounts.google.com`, `mail.google.com`) | Reading the account list, the Gmail unread feed and email threads |
 
 ## License

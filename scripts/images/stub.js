@@ -132,6 +132,13 @@
     windows: { update: noop, getCurrent: () => Promise.resolve({ id: 1 }), getAll: () => Promise.resolve([{ id: 1, type: 'normal' }]) },
     permissions: { contains: () => Promise.resolve(true), request: () => Promise.resolve(true), remove: () => Promise.resolve() },
     history: { search: () => Promise.resolve(history) },
+    topSites: { get: () => Promise.resolve([
+      { url: 'https://mail.google.com/mail/u/1/', title: 'Northwind Mail' },
+      { url: 'https://calendar.google.com/calendar/u/1/r', title: 'Northwind calendar' },
+      { url: 'https://wiki.northwind.example/', title: 'Team wiki' },
+      { url: 'https://portal.contoso.example/', title: 'Customer portal' },
+      { url: 'https://recipes.example/', title: 'Recipes' },
+    ]) },
     bookmarks: {
       getTree: () => Promise.resolve([bookmarkRoot]),
       onCreated: event, onRemoved: event, onChanged: event, onMoved: event, onChildrenReordered: event,

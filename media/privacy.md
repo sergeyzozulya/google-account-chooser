@@ -22,7 +22,7 @@ Used to mark the user's open tabs on the dashboard with the color and name of th
 
 ### storage
 
-Stores the user's settings (chrome.storage.sync) and, locally on the device, a cache of the signed-in accounts, their unread counts and unread email headers, plus usage statistics shown on the dashboard. Nothing is sent to the developer or third parties.
+Stores the user's settings (chrome.storage.sync) and, locally on the device, a cache of the signed-in accounts, their unread counts and unread email headers, plus usage statistics shown on the dashboard, and the files and sites the user adds, pins, removes or re-orders on it. Nothing is sent to the developer or third parties.
 
 ### alarms
 
@@ -30,7 +30,7 @@ Wakes the background service worker periodically (every 2 minutes by default, ad
 
 ### sidePanel
 
-Lets the user choose (Options → General) to open the extension's panel in Chrome's side panel instead of the toolbar popup.
+Lets the user choose (Options → Popup) to open the extension's panel in Chrome's side panel instead of the toolbar popup.
 
 ### declarativeNetRequestWithHostAccess
 
@@ -44,9 +44,13 @@ Optional, requested only when the user turns on the dashboard's Recent files sec
 
 Optional, requested only when the user turns on the dashboard's Bookmarks section. Reads the bookmarks bar and Other bookmarks to display a bookmarks bar on the dashboard (which can replace the New Tab page). Read-only use; nothing is transmitted.
 
+### topSites
+
+Optional, requested only when the user turns on the dashboard's Most visited section. Reads the list of most visited sites that Chrome keeps for its New Tab page, to display it on the dashboard. Read-only use; nothing is transmitted.
+
 ### favicon
 
-Optional, requested together with bookmarks to show each bookmark's site icon from Chrome's local favicon cache.
+Optional, requested together with bookmarks or topSites to show each site's icon from Chrome's local favicon cache.
 
 ### Host permission
 

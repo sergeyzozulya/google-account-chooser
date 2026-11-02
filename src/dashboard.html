@@ -162,8 +162,30 @@
       box-shadow: none;
     }
 
-    /* Section title hidden (Options → Dashboard → Sections → Title); panel actions go with it */
+    /* Section title hidden (Options → Dashboard → Sections → Title); panel actions go with it, except
+       a small edit button in the corner. Edit mode brings the head back, for Done and Reset. */
     .no-title > .section-head { display: none; }
+    .no-title:has(.editing) > .section-head { display: flex; }
+    .no-title:has(> .edit-corner) { position: relative; }
+    .edit-corner {
+      display: none;
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      z-index: 1;
+      padding: 4px;
+      border: none;
+      border-radius: 50%;
+      background: var(--bg);
+      color: var(--text-low);
+      cursor: pointer;
+      opacity: 0;
+    }
+    .edit-corner svg { display: block; width: 14px; height: 14px; }
+    .edit-corner:hover { background: var(--hover); color: var(--text); }
+    .panel:hover .edit-corner, .edit-corner:focus-visible { opacity: 1; }
+    .no-title:not(:has(.editing)) .edit-corner:not([hidden]) { display: flex; }
+    .accordion .no-title .edit-corner:not([hidden]) { display: none; }
 
     /* Sections: 12-column grid; each section's span comes from Options → Dashboard */
     #sections {
@@ -627,19 +649,77 @@
     .row.in-group { box-shadow: inset 3px 0 0 var(--group); }
 
     /* Options → Open tabs → Close buttons: × on the row under the pointer */
-    .row .close {
+    .row .close, .row .pin, .bar-row .close {
       display: flex;
       flex-shrink: 0;
       padding: 3px;
       margin: -3px -6px -3px 0;
       border-radius: 50%;
       color: var(--text-low);
+      cursor: pointer;
       opacity: 0;
     }
 
     .row:hover .close { opacity: 1; }
-    .row .close:hover { background: rgba(128, 128, 128, .25); color: var(--text); }
-    .row .close svg { width: 14px; height: 14px; }
+    .row .close:hover, .row .pin:hover, .bar-row .close:hover { background: rgba(128, 128, 128, .25); color: var(--text); }
+    .row .close svg, .row .pin svg, .bar-row .close svg { width: 14px; height: 14px; }
+    .row .pin.pinned svg { fill: currentColor; }
+
+    /* Options → Most visited: tiles with large icons, like Chrome's New Tab page, or a row of small icons */
+    #visited:is(.large, .small-row) { gap: 4px; padding: 12px; }
+    #visited.large { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
+    #visited.large.icons-only { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); }
+    #visited.small-row { display: flex; flex-wrap: wrap; }
+    #visited .empty { grid-column: 1 / -1; }
+    #visited:is(.large, .small-row) .row { min-width: 0; border-radius: 8px; }
+    #visited.large .row { flex-direction: column; justify-content: center; gap: 8px; padding: 12px 8px; }
+    #visited.small-row .row { width: auto; max-width: 220px; padding: 6px 10px; }
+    #visited:is(.large, .small-row).icons-only .row { padding: 8px; }
+    #visited.large .row img { width: 40px; height: 40px; }
+    #visited.large .row .title { flex: none; width: 100%; text-align: center; }
+    #visited.small-row .row .title { flex: 0 1 auto; }
+    #visited.icons-only .row .title { display: none; }
+
+    /* Edit mode (Recent files, Most visited): rows drag, and show pin and remove buttons */
+    .panel:has(.editing) .section-head .text-btn { opacity: 1; }
+    .editing .row { position: relative; cursor: default; }
+    .editing .row[draggable] { cursor: grab; }
+    .editing .row.dragging { opacity: .4; }
+    .editing .row .pin, .editing .row .close, .editing .bar-row .close { opacity: 1; }
+    .editing .row .pin { margin-left: auto; }
+    #visited.editing.large .row { padding-top: 28px; }
+    #visited.editing.large .row .pin, #visited.editing.large .row .close { position: absolute; top: 6px; margin: 0; }
+    #visited.editing.large .row .pin { left: 6px; }
+    #visited.editing.large .row .close { right: 6px; }
+
+    /* Where a dragged row lands: a straight line between rows, or between icons along a line */
+    .row.drop-before::before, .row.drop-after::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+    }
+    .row.drop-before::before { top: -1px; }
+    .row.drop-after::before { bottom: -1px; }
+    #visited:is(.large, .small-row) .row:is(.drop-before, .drop-after)::before { top: 4px; bottom: 4px; width: 2px; height: auto; }
+    #visited:is(.large, .small-row) .row.drop-before::before { left: -3px; right: auto; }
+    #visited:is(.large, .small-row) .row.drop-after::before { left: auto; right: -3px; }
+
+    #visited-add { display: flex; flex-basis: 100%; grid-column: 1 / -1; gap: 8px; padding: 8px 16px; }
+    #visited:is(.large, .small-row) #visited-add { padding: 8px 4px 0; }
+    #visited-add input {
+      flex: 1;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg);
+      font-size: 13px;
+      outline: none;
+    }
+    #visited-add input:focus { border-color: var(--accent); }
 
     .empty {
       padding: 16px;
@@ -739,6 +819,7 @@
       font-size: 13px;
     }
 
+    .editing .bar-row { grid-template-columns: 18px 110px 1fr 36px 20px; }
     .bar-row img { width: 18px; height: 18px; }
     .bar-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bar-row .count { text-align: right; color: var(--text-low); font-size: 12px; }
@@ -808,17 +889,33 @@
         <div class="section-head">
           <h2>Recent files</h2>
           <span class="hint"></span>
-          <button class="text-btn" id="recent-clear" title="Hide files opened so far (browser history isn't changed)" hidden>Clear</button>
+          <button class="text-btn" id="recent-clear" title="Hide files opened so far, except pinned ones (browser history isn't changed)" hidden>Clear</button>
+          <button class="text-btn" id="recent-reset" title="Bring back removed files and undo pins" hidden>Reset</button>
+          <button class="text-btn" id="recent-edit" data-edit="recent" title="Remove, pin and re-order files" hidden>Edit</button>
         </div>
+        <button class="edit-corner" id="recent-edit-corner" data-edit="recent" title="Remove, pin and re-order files" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         <div class="panel-body" id="recent"></div>
+      </section>
+
+      <section class="card panel" data-section="visited">
+        <div class="section-head">
+          <h2>Most visited</h2>
+          <span class="hint"></span>
+          <button class="text-btn" id="visited-reset" title="Bring back removed sites, delete added ones, and undo pins and order" hidden>Reset</button>
+          <button class="text-btn" id="visited-edit" data-edit="visited" title="Add, remove, pin and re-order sites" hidden>Edit</button>
+        </div>
+        <button class="edit-corner" id="visited-edit-corner" data-edit="visited" title="Add, remove, pin and re-order sites" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <div class="panel-body" id="visited"></div>
       </section>
 
       <section class="card panel" data-section="stats">
         <div class="section-head">
           <h2>Statistics</h2>
           <span class="hint"></span>
-          <button class="text-btn" id="stats-reset">Reset</button>
+          <button class="text-btn" id="stats-reset" title="Set all counts back to zero" hidden>Reset</button>
+          <button class="text-btn" id="stats-edit" data-edit="stats" title="Remove services and accounts, or reset all counts" hidden>Edit</button>
         </div>
+        <button class="edit-corner" id="stats-edit-corner" data-edit="stats" title="Remove services and accounts, or reset all counts" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         <div class="panel-body" id="stats"></div>
       </section>
 

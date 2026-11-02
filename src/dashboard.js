@@ -832,17 +832,19 @@ function senderColor(name) {
 // Rows under a band per account key, in order of first appearance; items whose key is null go
 // last under `other` (icon and label HTML). A known account's index and email (URLs name it either
 // way, e.g. /u/0/ and authuser=name@gmail.com) share one band. Each group lists at most `limit` rows.
-function groupedRows(items, keyOf, other, row, limit = Infinity) {
+// One account can be named by number in some links and by email in others
+const groupKey = (key) => key !== null && findAccount(key) ? String(findAccount(key).index) : key;
+
+function groupedRows(items, keyOf, other, row) {
   const groups = new Map();
   for (const item of items) {
-    let key = keyOf(item);
-    if (key !== null && findAccount(key)) key = String(findAccount(key).index);
+    const key = groupKey(keyOf(item));
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   }
   return [...groups].sort(([a], [b]) => (a === null) - (b === null)).map(([key, list]) => `
     <div class="group-label">${key === null ? other : `${accountIcon(key)}${esc(accountLabel(key))}`}</div>
-    ${list.slice(0, limit).map(row).join('')}
+    ${list.map(row).join('')}
   `).join('');
 }
 
@@ -930,6 +932,26 @@ function scheduleRenderTabs() {
   _tabsTimer = setTimeout(renderTabs, 200);
 }
 
+// ── Edit mode (Recent files, Most visited, Statistics) ─────────────────────
+// Rows stop opening their link, carry pin and remove buttons, and drag to re-order
+
+const SVG_PIN = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>';
+const sectionEditing = { recent: false, visited: false, stats: false };
+
+function renderEditButtons(id, granted) {
+  const editing = sectionEditing[id];
+  const edit = document.getElementById(`${id}-edit`);
+  edit.hidden = !granted;
+  edit.textContent = editing ? 'Done' : 'Edit';
+  document.getElementById(`${id}-edit-corner`).hidden = !granted;
+  document.getElementById(`${id}-reset`).hidden = !granted || !editing;
+  document.getElementById(id).classList.toggle('editing', editing);
+}
+
+const editButtons = (pinned, pinAttr, removeAttr, value) => `
+  <span class="pin${pinned ? ' pinned' : ''}" ${pinAttr}="${esc(value)}" title="${pinned ? 'Unpin' : 'Pin to top'}">${SVG_PIN}</span>
+  <span class="close" ${removeAttr}="${esc(value)}" title="Remove">${SVG_CLOSE}</span>`;
+
 // ── Recent files (optional history permission) ─────────────────────────────
 
 function relativeTime(ms) {
@@ -946,10 +968,14 @@ function recentTime(ms) {
   return formatDate(new Date(ms), panelSettings.recentTime);
 }
 
+let recentFiles = new Map(); // document id → file, from the last render
+
 async function renderRecent() {
   const el = document.getElementById('recent');
   const granted = await chrome.permissions.contains({ permissions: ['history'] });
-  document.getElementById('recent-clear').hidden = !granted;
+  const editing = sectionEditing.recent;
+  renderEditButtons('recent', granted);
+  document.getElementById('recent-clear').hidden = !granted || editing;
 
   if (!granted) {
     el.innerHTML = `
@@ -961,12 +987,10 @@ async function renderRecent() {
     return;
   }
 
-  const items = await chrome.history.search({
-    text: 'docs.google.com',
-    // Clear only hides files opened before it was pressed
-    startTime: Math.max(Date.now() - panelSettings.recentDays * 864e5, (await chrome.storage.local.get({ recentClearedAt: 0 })).recentClearedAt),
-    maxResults: 1000,
-  });
+  const { recentClearedAt, recentPinned, recentRemoved } = await chrome.storage.local.get({ recentClearedAt: 0, recentPinned: [], recentRemoved: {} });
+  const pinnedIds = new Set(recentPinned.map(f => f.id));
+  // All of history, not just the period: pinned files outside it still show their latest title and visit
+  const items = await chrome.history.search({ text: 'docs.google.com', startTime: 0, maxResults: 1000 });
   items.sort((a, b) => b.lastVisitTime - a.lastVisitTime);
 
   // One entry per document, newest visit first, with the visits of all its URLs. Docs URLs often
@@ -975,8 +999,8 @@ async function renderRecent() {
   const files = new Map();
   for (const item of items) {
     const m = item.url.match(/^https:\/\/docs\.google\.com\/(document|spreadsheets|presentation|forms)\/(?:u\/\d+\/)?d\/(?:e\/)?([\w-]+)/);
-    if (!m || !panelSettings[RECENT_TYPES[m[1]]]) continue;
-    if (!files.has(m[2])) files.set(m[2], { ...item, service: DOCS_KINDS[m[1]], visits: 0 });
+    if (!m || !(panelSettings[RECENT_TYPES[m[1]]] || pinnedIds.has(m[2]))) continue;
+    if (!files.has(m[2])) files.set(m[2], { ...item, id: m[2], service: DOCS_KINDS[m[1]], visits: 0 });
     const file = files.get(m[2]);
     file.visits += item.visitCount;
     const account = accountFromUrl(item.url);
@@ -987,40 +1011,202 @@ async function renderRecent() {
     }
   }
 
-  if (files.size === 0) {
+  recentFiles = files;
+
+  // Pinned files stay listed, as last seen, once history no longer has them. Clear and Remove only
+  // hide files opened before they were pressed.
+  const pinned = recentPinned.map(f => files.get(f.id) ?? f);
+  const since = Math.max(Date.now() - panelSettings.recentDays * 864e5, recentClearedAt);
+  const list = [...files.values()].filter(f => !pinnedIds.has(f.id) && f.lastVisitTime >= since && f.lastVisitTime > (recentRemoved[f.id] ?? 0));
+
+  if (pinned.length === 0 && list.length === 0) {
     el.innerHTML = `<div class="empty">No recently opened files.</div>`;
     return;
   }
 
   // Most visited first; equally visited files stay newest first
-  const list = [...files.values()];
   if (panelSettings.recentSort === 'visits') list.sort((a, b) => b.visits - a.visits);
 
   // A file none of whose visits names an account opened in Google's default account (index 0); its
   // link stays as it was, so opening it still goes through Account Chooser
   const accountOf = (f) => accountFromUrl(f.url) ?? '0';
   const row = (f) => `
-    <button class="row" data-url="${esc(f.url)}" data-service="${f.service}" title="${esc(f.url)}">
+    <button class="row" ${editing
+      ? `data-item="${esc(f.id)}"${pinnedIds.has(f.id) ? ' draggable="true"' : ''}`
+      : `data-url="${esc(f.url)}" data-service="${f.service}"`} title="${esc(f.url)}">
       ${SERVICE_DEFS[f.service].icon}
       <span class="title">${esc((f.title || f.url).replace(/ - Google (Docs|Sheets|Slides|Forms)$/, ''))}</span>
-      ${panelSettings.recentAccount && panelSettings.recentGroupBy !== 'account' ? rowAccount(accountOf(f)) : ''}
+      ${panelSettings.recentAccount && (panelSettings.recentGroupBy !== 'account' || pinnedIds.has(f.id)) ? rowAccount(accountOf(f)) : ''}
       ${panelSettings.recentTime === 'off' ? '' : `<span class="meta">${esc(recentTime(f.lastVisitTime))}</span>`}
+      ${editing ? editButtons(pinnedIds.has(f.id), 'data-pin-file', 'data-remove-file', f.id) : ''}
     </button>`;
-  const limit = panelSettings.recentPerAccount;
+  // Pinned files always show and count towards the limit of their group, or of the whole list
+  const keyOf = { account: f => groupKey(accountOf(f)), type: f => f.service }[panelSettings.recentGroupBy] ?? (() => '');
+  const room = new Map();
+  const listed = list.filter((f) => {
+    const key = keyOf(f);
+    if (!room.has(key)) room.set(key, panelSettings.recentPerAccount - pinned.filter(p => keyOf(p) === key).length);
+    room.set(key, room.get(key) - 1);
+    return room.get(key) >= 0;
+  });
+  // Pinned files come first; a band sets them apart from other groups
+  const pinnedRows = (pinned.length && panelSettings.recentGroupBy !== 'none' ? `<div class="group-label">${SVG_PIN}Pinned</div>` : '')
+    + pinned.map(row).join('');
   if (panelSettings.recentGroupBy === 'account') {
-    el.innerHTML = groupedRows(list, accountOf, '', row, limit);
+    el.innerHTML = pinnedRows + groupedRows(listed, accountOf, '', row);
   } else if (panelSettings.recentGroupBy === 'type') {
     // Docs, Sheets, Slides, Forms, in that order
-    el.innerHTML = Object.values(DOCS_KINDS)
-      .map(service => [service, list.filter(f => f.service === service)])
+    el.innerHTML = pinnedRows + Object.values(DOCS_KINDS)
+      .map(service => [service, listed.filter(f => f.service === service)])
       .filter(([, files]) => files.length)
       .map(([service, files]) => `
         <div class="group-label">${SERVICE_DEFS[service].icon}${SERVICE_DEFS[service].label}</div>
-        ${files.slice(0, limit).map(row).join('')}
+        ${files.map(row).join('')}
       `).join('');
   } else {
-    el.innerHTML = list.slice(0, limit).map(row).join('');
+    el.innerHTML = pinnedRows + listed.map(row).join('');
   }
+}
+
+async function togglePin(id) {
+  const { recentPinned } = await chrome.storage.local.get({ recentPinned: [] });
+  if (recentPinned.some(f => f.id === id)) {
+    await chrome.storage.local.set({ recentPinned: recentPinned.filter(f => f.id !== id) });
+    return;
+  }
+  const { url, title, service, lastVisitTime } = recentFiles.get(id);
+  await chrome.storage.local.set({ recentPinned: [...recentPinned, { id, url, title, service, lastVisitTime }] });
+}
+
+// Hides the file until it's opened again
+async function removeFile(id) {
+  const { recentPinned, recentRemoved } = await chrome.storage.local.get({ recentPinned: [], recentRemoved: {} });
+  await chrome.storage.local.set({
+    recentPinned: recentPinned.filter(f => f.id !== id),
+    recentRemoved: { ...recentRemoved, [id]: Date.now() },
+  });
+}
+
+async function orderPinnedFiles(ids) {
+  const { recentPinned } = await chrome.storage.local.get({ recentPinned: [] });
+  await chrome.storage.local.set({ recentPinned: ids.map(id => recentPinned.find(f => f.id === id)) });
+}
+
+// ── Most visited (optional topSites + favicon permissions) ─────────────────
+// Chrome's own list, the one its New Tab page shows
+
+const VISITED_PERMISSIONS = { permissions: ['topSites', 'favicon'] };
+
+// Options → Most visited → Icons and Text
+function applyVisitedLook() {
+  const el = document.getElementById('visited');
+  el.classList.toggle('large', panelSettings.visitedIcons === 'large');
+  el.classList.toggle('small-row', panelSettings.visitedIcons === 'small-row');
+  el.classList.toggle('icons-only', !panelSettings.visitedText);
+}
+
+// Edit mode's changes, kept on this device. Chrome's own list isn't changed: removed sites just aren't
+// listed, added and pinned ones ({ url, title }) stay listed even after Chrome drops them, and order
+// ranks urls.
+const VISITED_EDITS = { removed: [], pinned: [], order: [], added: [] };
+let visitedSites = [];  // listed sites, in order
+
+async function renderVisited() {
+  const el = document.getElementById('visited');
+  const granted = await chrome.permissions.contains(VISITED_PERMISSIONS);
+  const editing = sectionEditing.visited;
+  renderEditButtons('visited', granted);
+
+  if (!granted) {
+    el.innerHTML = `
+      <div class="empty">
+        Show the sites you visit most, from the list Chrome keeps for its New Tab page.
+        The list stays on this device.<br>
+        <button class="text-btn" id="visited-on">Turn on</button>
+      </div>`;
+    return;
+  }
+
+  const { removed, pinned, order, added } = await visitedEdits();
+  const top = await chrome.topSites.get();
+  const sites = [...added.filter(a => !top.some(s => s.url === a.url)), ...top];
+  const rank = (s) => {
+    const i = order.indexOf(s.url);
+    return i === -1 ? Infinity : i;
+  };
+  const inOrder = (list) => [...list].sort((a, b) => rank(a) - rank(b));
+  const pins = inOrder(pinned.map(p => sites.find(s => s.url === p.url) ?? p));
+  const rest = inOrder(sites.filter(s => !removed.includes(s.url) && !pinned.some(p => p.url === s.url)));
+  // Pinned sites always show; the others fill up to Options → Most visited → Sites listed
+  visitedSites = [...pins, ...rest.slice(0, Math.max(0, panelSettings.visitedCount - pins.length))];
+
+  const isPinned = (s) => pinned.some(p => p.url === s.url);
+  // In edit mode rows don't open their site: they drag, and carry the pin and remove buttons
+  const row = (s) => `
+    <button class="row" ${editing
+      ? `data-item="${esc(s.url)}" draggable="true"`
+      : `data-url="${esc(s.url)}" data-service="${serviceForUrl(s.url) || ''}"`} title="${esc(s.title ? `${s.title}\n${s.url}` : s.url)}">
+      ${bookmarkIcon(s.url, 64)}
+      <span class="title">${esc(s.title || s.url)}</span>
+      ${editing ? editButtons(isPinned(s), 'data-visited-pin', 'data-visited-remove', s.url) : ''}
+    </button>`;
+  const empty = sites.length
+    ? `All sites are removed. Use Reset${editing ? '' : ' in Edit'} to bring them back.`
+    : `Chrome has no most visited sites yet.${editing ? '' : ' Use Edit to add one.'}`;
+  el.innerHTML = (visitedSites.length ? visitedSites.map(row).join('') : `<div class="empty">${empty}</div>`)
+    + (editing ? `
+      <form id="visited-add">
+        <input name="url" placeholder="Add a site, like example.com" aria-label="Site address" autocomplete="off" required>
+        <button class="text-btn">Add</button>
+      </form>` : '');
+}
+
+async function visitedEdits() {
+  const { visitedEdits } = await chrome.storage.local.get({ visitedEdits: VISITED_EDITS });
+  return { ...VISITED_EDITS, ...visitedEdits };
+}
+
+async function editVisited(change) {
+  const edits = await visitedEdits();
+  await chrome.storage.local.set({ visitedEdits: { ...edits, ...change(edits) } });
+}
+
+// A typed address as a link: https unless it says otherwise, and only web pages
+function siteUrl(text) {
+  const value = text.trim();
+  try {
+    const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`);
+    return /^https?:$/.test(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+// Added sites start pinned, so Sites listed can't hide them right away
+function addVisited(url) {
+  const site = { url, title: new URL(url).hostname.replace(/^www\./, '') };
+  return editVisited(({ removed, pinned, added }) => ({
+    removed: removed.filter(u => u !== url),
+    pinned: pinned.some(p => p.url === url) ? pinned : [...pinned, site],
+    added: added.some(a => a.url === url) ? added : [...added, site],
+  }));
+}
+
+function toggleVisitedPin(url) {
+  return editVisited(({ pinned }) => {
+    if (pinned.some(p => p.url === url)) return { pinned: pinned.filter(p => p.url !== url) };
+    const { title } = visitedSites.find(s => s.url === url);
+    return { pinned: [...pinned, { url, title }] };
+  });
+}
+
+function removeVisited(url) {
+  return editVisited(({ removed, pinned, order, added }) => ({
+    removed: [...removed, url],
+    pinned: pinned.filter(p => p.url !== url),
+    order: order.filter(u => u !== url),
+    added: added.filter(a => a.url !== url),
+  }));
 }
 
 // ── Bookmarks bar (optional bookmarks + favicon permissions) ───────────────
@@ -1040,10 +1226,10 @@ let bookmarkListeners = false;
 let bookmarkMenus = [];        // open menus, outermost first: { el, anchor }
 
 // Google services get their own icon; other sites use Chrome's favicon cache
-function bookmarkIcon(url) {
+function bookmarkIcon(url, size = 32) {
   const service = serviceForUrl(url);
   if (service) return SERVICE_DEFS[service].icon;
-  return `<img src="${chrome.runtime.getURL('/_favicon/')}?pageUrl=${encodeURIComponent(url)}&size=32" alt="">`;
+  return `<img src="${chrome.runtime.getURL('/_favicon/')}?pageUrl=${encodeURIComponent(url)}&size=${size}" alt="">`;
 }
 
 // Bar button for a bookmark or folder; in the vertical list a folder has a chevron and opens in place
@@ -1194,7 +1380,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeBookm
 
 // ── Statistics ─────────────────────────────────────────────────────────────
 
-function barRows(entries, iconFor, labelFor) {
+function barRows(entries, iconFor, labelFor, group) {
   const max = entries[0][1];
   return entries.map(([key, count]) => `
     <div class="bar-row">
@@ -1202,6 +1388,7 @@ function barRows(entries, iconFor, labelFor) {
       <span class="name">${esc(labelFor(key))}</span>
       <div class="bar" style="width:${(count / max) * 100}%"></div>
       <span class="count">${count}</span>
+      ${sectionEditing.stats ? `<span class="close" data-remove-stat="${group}" data-key="${esc(key)}" title="Remove">${SVG_CLOSE}</span>` : ''}
     </div>`).join('');
 }
 
@@ -1211,6 +1398,10 @@ async function renderStats() {
   const services = Object.entries(stats.services).filter(([h]) => SERVICE_DEFS[h]).sort((a, b) => b[1] - a[1]);
   const accts = Object.entries(stats.accounts).sort((a, b) => b[1] - a[1]);
 
+  // Nothing to edit until something is counted
+  if (services.length === 0) sectionEditing.stats = false;
+  renderEditButtons('stats', services.length > 0);
+
   if (services.length === 0) {
     el.innerHTML = '<div class="empty">Services you open through the extension will be counted here.</div>';
     return;
@@ -1218,11 +1409,18 @@ async function renderStats() {
 
   el.innerHTML = `
     <div class="group-label"><img src="icons/google.webp" width="18" height="18" alt="">Services</div>
-    ${barRows(services.slice(0, 10), h => SERVICE_DEFS[h].icon, h => SERVICE_DEFS[h].label)}
+    ${barRows(services.slice(0, 10), h => SERVICE_DEFS[h].icon, h => SERVICE_DEFS[h].label, 'services')}
     ${accts.length ? `
       <div class="group-label">${sectionIcon('accounts')}Accounts</div>
-      ${barRows(accts, accountIcon, accountLabel)}` : ''}
+      ${barRows(accts, accountIcon, accountLabel, 'accounts')}` : ''}
   `;
+}
+
+// Clears the count; the service or account comes back when it's opened again
+async function removeStat(group, key) {
+  const { stats } = await chrome.storage.local.get({ stats: { services: {}, accounts: {} } });
+  delete stats[group][key];
+  await chrome.storage.local.set({ stats });
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
@@ -1231,6 +1429,7 @@ function renderAll() {
   renderAccounts();
   renderTabs();
   renderRecent();
+  renderVisited();
   renderStats();
   renderBookmarks();
 }
@@ -1251,6 +1450,7 @@ async function init() {
   mailSettings = Object.fromEntries(Object.keys(GMAIL_DEFAULTS).map(key => [key, data[key]]));
   applyMailLook();
   panelSettings = Object.fromEntries(Object.keys(PANEL_DEFAULTS).map(key => [key, data[key]]));
+  applyVisitedLook();
   if (isNewTab) document.title = data.newTabTitle || NEW_TAB_TITLE;
   renderClock();
   accountLabels = data.accountLabels;
@@ -1307,6 +1507,21 @@ document.addEventListener('click', async (e) => {
   // Clicks inside the inbox panel keep it open, except on a link
   if (!e.target.closest('.inbox') || e.target.closest('[data-url]')) closeLauncher();
 
+  const visitedPin = e.target.closest('[data-visited-pin]');
+  if (visitedPin) { toggleVisitedPin(visitedPin.dataset.visitedPin); return; }
+
+  const visitedRemove = e.target.closest('[data-visited-remove]');
+  if (visitedRemove) { removeVisited(visitedRemove.dataset.visitedRemove); return; }
+
+  const pin = e.target.closest('[data-pin-file]');
+  if (pin) { togglePin(pin.dataset.pinFile); return; }
+
+  const removeStatBtn = e.target.closest('[data-remove-stat]');
+  if (removeStatBtn) { removeStat(removeStatBtn.dataset.removeStat, removeStatBtn.dataset.key); return; }
+
+  const removeFileBtn = e.target.closest('[data-remove-file]');
+  if (removeFileBtn) { removeFile(removeFileBtn.dataset.removeFile); return; }
+
   const link = e.target.closest('[data-url]');
   if (link) { openLink(link.dataset.url, link.dataset.service, e.ctrlKey || e.metaKey); return; }
 
@@ -1336,6 +1551,14 @@ document.addEventListener('click', async (e) => {
       e.target.insertAdjacentText('afterend', ` ${err.message}`);
     }
   }
+
+  if (e.target.id === 'visited-on') {
+    try {
+      if (await chrome.permissions.request(VISITED_PERMISSIONS)) renderVisited();
+    } catch (err) {
+      e.target.insertAdjacentText('afterend', ` ${err.message}`);
+    }
+  }
 });
 
 // An accordion head opens its section (or folds it when open), here and in the popup's other frame
@@ -1358,9 +1581,9 @@ window.addEventListener('message', (e) => {
 // Left and Right outside a text field. Past the first or last one, the popup moves focus on to the
 // launcher or its other frame.
 
-// Clear (Recent files) and Reset (Statistics) are mouse-only: the arrow keys skip them
+// Clear and the Edit and Reset buttons are mouse-only: the arrow keys skip them
 const navItems = () => [...document.querySelectorAll('button, input, .section-head[tabindex]')]
-  .filter(el => !el.disabled && el.getClientRects().length && !el.matches('#recent-clear, #stats-reset'));
+  .filter(el => !el.disabled && el.getClientRects().length && !el.matches('#recent-clear, [data-edit], #recent-reset, #visited-reset, #stats-reset'));
 
 function focusEdge(at) {
   const items = navItems();
@@ -1393,9 +1616,113 @@ document.getElementById('recent-clear').addEventListener('click', async () => {
   renderRecent();
 });
 
-document.getElementById('stats-reset').addEventListener('click', () => {
-  chrome.storage.local.set({ stats: { services: {}, accounts: {} } });
-});
+const EDIT_SECTIONS = {
+  recent: {
+    render: renderRecent,
+    reset: () => chrome.storage.local.set({ recentPinned: [], recentRemoved: {} }),
+  },
+  visited: {
+    render: renderVisited,
+    reset: () => chrome.storage.local.set({ visitedEdits: VISITED_EDITS }),
+  },
+  stats: {
+    render: renderStats,
+    reset: () => chrome.storage.local.set({ stats: { services: {}, accounts: {} } }),
+  },
+};
+
+document.querySelectorAll('[data-edit]').forEach(button => button.addEventListener('click', () => {
+  const { edit } = button.dataset;
+  sectionEditing[edit] = !sectionEditing[edit];
+  EDIT_SECTIONS[edit].render();
+}));
+
+// Reset asks first: its first click only changes it to Confirm reset, for a few seconds
+for (const [id, { reset }] of Object.entries(EDIT_SECTIONS)) {
+  const button = document.getElementById(`${id}-reset`);
+  let timer = null;
+  const disarm = () => {
+    clearTimeout(timer);
+    timer = null;
+    button.textContent = 'Reset';
+  };
+  button.addEventListener('click', () => {
+    if (timer === null) {
+      button.textContent = 'Confirm reset';
+      timer = setTimeout(disarm, 4000);
+      return;
+    }
+    disarm();
+    reset();
+  });
+}
+
+// Edit mode: drag a row onto another of its kind (pinned or not) to move it before or after that one.
+// onMove gets the keys of all draggable rows in their new order.
+function makeRowsSortable(id, onMove) {
+  const list = document.getElementById(id);
+  let dragged = null;
+  const isPinned = (row) => !!row.querySelector('.pin.pinned');
+  const clear = () => list.querySelectorAll('.drop-before, .drop-after')
+    .forEach(el => el.classList.remove('drop-before', 'drop-after'));
+  const target = (e) => {
+    const row = e.target.closest('.row[draggable]');
+    if (!row || row === dragged || isPinned(row) !== isPinned(dragged)) return null;
+    const r = row.getBoundingClientRect();
+    // The list runs down the section; the other layouts run along a line
+    const along = getComputedStyle(list).display !== 'block';
+    return { row, before: along ? e.clientX < r.left + r.width / 2 : e.clientY < r.top + r.height / 2 };
+  };
+
+  list.addEventListener('dragstart', (e) => {
+    const row = e.target.closest('.row[draggable]');
+    if (!row) return;
+    dragged = row;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => row.classList.add('dragging'), 0);
+  });
+  list.addEventListener('dragover', (e) => {
+    if (dragged === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    clear();
+    const t = target(e);
+    if (t) t.row.classList.add(t.before ? 'drop-before' : 'drop-after');
+  });
+  list.addEventListener('drop', (e) => {
+    const t = target(e);
+    if (!t) return;
+    e.preventDefault();
+    const rows = [...list.querySelectorAll('.row[draggable]')].filter(row => row !== dragged);
+    rows.splice(rows.indexOf(t.row) + (t.before ? 0 : 1), 0, dragged);
+    onMove(rows.map(row => row.dataset.item));
+  });
+  list.addEventListener('dragend', () => {
+    dragged?.classList.remove('dragging');
+    dragged = null;
+    clear();
+  });
+}
+
+makeRowsSortable('recent', orderPinnedFiles);
+makeRowsSortable('visited', urls => editVisited(({ order }) => ({ order: [...urls, ...order.filter(url => !urls.includes(url))] })));
+
+// Most visited in edit mode: add a site by its address
+{
+  const list = document.getElementById('visited');
+  list.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = e.target.elements.url;
+    const url = siteUrl(input.value);
+    if (url) {
+      addVisited(url);
+    } else {
+      input.setCustomValidity('Enter a site address, like example.com');
+      input.reportValidity();
+    }
+  });
+  list.addEventListener('input', e => e.target.setCustomValidity(''));
+}
 
 document.getElementById('account-add').addEventListener('click', () => setManualCount(accounts.length + 1));
 document.getElementById('account-remove').addEventListener('click', () => setManualCount(Math.max(1, accounts.length - 1)));
@@ -1421,6 +1748,8 @@ chrome.tabGroups.onUpdated.addListener(scheduleRenderTabs);
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.stats) renderStats();
+  if (area === 'local' && (changes.recentPinned || changes.recentRemoved)) renderRecent();
+  if (area === 'local' && changes.visitedEdits) renderVisited();
   if (area !== 'sync') return;
   if (changes.newTabTitle && isNewTab) document.title = changes.newTabTitle.newValue || NEW_TAB_TITLE;
   if (changes.dashboardIcon && !embedded) setPageIcon(document.querySelector('.page-header img'), 64, changes.dashboardIcon.newValue);
@@ -1452,6 +1781,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
     for (const key of panelChanges) panelSettings[key] = changes[key].newValue ?? PANEL_DEFAULTS[key];
     if (panelChanges.some(key => key.startsWith('tabs'))) renderTabs();
     if (panelChanges.some(key => key.startsWith('recent'))) renderRecent();
+    if (panelChanges.some(key => key.startsWith('visited'))) {
+      applyVisitedLook();
+      renderVisited();
+    }
   }
   if (changes.accountLabels || changes.accountOrder) {
     accountLabels = changes.accountLabels?.newValue ?? accountLabels;
@@ -1470,7 +1803,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 // The dashboard coming back into view (its tab selected, or its window focused) shows what changed
-// meanwhile: accounts and mail, open tabs, and recent files, whose browser history sends no events
+// meanwhile: accounts and mail, open tabs, and recent files and most visited sites, whose browser
+// history sends no events
 let activatedAt = Date.now();  // loading counts, init refreshes
 function onActivate() {
   // Selecting the tab fires both visibilitychange and focus
@@ -1480,6 +1814,7 @@ function onActivate() {
   renderPageIcon();
   renderTabs();
   renderRecent();
+  renderVisited();
   refresh();
 }
 
