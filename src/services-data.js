@@ -142,7 +142,6 @@ const GMAIL_DEFAULTS = {
   mailListCount: 'all',    // emails listed per account: '3', '5', '10' or 'all' (the feed has at most 20)
   mailSnippetLines: 3,     // lines of each email's text in lists, 0–3
   mailAvatars: true,       // sender avatars in lists and threads
-  mailListHeader: true,    // "Inbox" and Open Gmail above lists in account cards
   mailClick: 'preview',    // clicking an email: 'preview' (in its list) or 'gmail'
   threadOpen: 'last',      // messages open when a thread shows: 'last' or 'all'
   mailCheckMinutes: 2,     // how often unread mail is checked
@@ -166,10 +165,30 @@ const PANEL_DEFAULTS = {
   recentForms: true,
   recentDays: 30,          // files opened in the last 1, 7, 30 or 90 days
   recentSort: 'recent',    // 'recent' (last opened first) or 'visits' (most visited first)
-  visitedIcons: 'small-col', // 'large' (name under the icon), or small with the name on the right, in a 'small-col' or a 'small-row'
+  visitedSource: 'chrome',  // sites listed: Chrome's New Tab list ('chrome'), counted from browser 'history', or only added ones ('mine')
+  visitedDays: 30,         // with 'history': sites visited in the last 7, 30 or 90 days
+  visitedIcons: 'small',   // 'large' (name under the icon) or 'small' (name on the right)
+  visitedLargePerRow: 'auto', // with 'large': icons per row, or 'auto' to fit the section's width
+  visitedColumns: '1',     // with 'small': columns, or 'auto' for as many as fit side by side
   visitedText: true,       // each site's name; off lists icons only
+  visitedVisits: false,    // with 'history': each site's number of visits
   visitedCount: 10,        // sites listed, at most
 };
+
+// Most visited's Edit mode changes, kept on this device (chrome.storage.local visitedEdits). The source
+// list isn't changed: removed holds hostnames, whose sites aren't listed; added and pinned sites
+// ({ url, title }) stay listed even after the source drops them; order ranks urls; names maps a url
+// to the name it was renamed to.
+const VISITED_EDITS = { removed: [], pinned: [], order: [], added: [], names: {} };
+
+// Stored edits with every field; sites removed by url, before Remove hid whole sites, become their hostname
+function visitedEditsOf(stored) {
+  const edits = { ...VISITED_EDITS, ...stored };
+  const host = (url) => {
+    try { return new URL(url).hostname; } catch { return url; }
+  };
+  return { ...edits, removed: [...new Set(edits.removed.map(host))] };
+}
 
 // Dashboard sections in default order; width is a share of the page row
 const DASHBOARD_SECTIONS = [
@@ -214,6 +233,51 @@ function dashboardSections(saved) {
     const def = DASHBOARD_SECTIONS.find(d => d.id === s.id);
     return { id: s.id, label: def.label, visible: s.visible ?? def.visible, width: s.width ?? def.width, title: s.title ?? true };
   });
+}
+
+// Options → Search → Suggestions: where suggestions come from, in their default order, and whether
+// each is on by default. Google suggestions send what's typed to Google, and currency rates are
+// fetched online, so they start off.
+const SUGGEST_SOURCES = [
+  { id: 'calc',      label: 'Calculator and dates', hint: '12*(3+4)/2, 15% of 80, days until dec 25, today + 90 days, week number: Enter puts the result in the field and copies it', on: true },
+  { id: 'convert',   label: 'Unit conversion',    hint: '5 km in mi, 72 f in c, 3 cups to ml', on: true },
+  { id: 'time',      label: 'Time and time zones', hint: 'time tokyo, 3pm london in tokyo, 9:30 in new york', on: true },
+  { id: 'currency',  label: 'Currency conversion', hint: '100 usd in eur, ₴500 to $: daily rates for about 160 currencies by ExchangeRate-API, fetched online every few hours', on: false, origins: ['https://open.er-api.com/*'] },
+  { id: 'services',  label: 'Google services',    hint: 'cal or drive work opens a service in an account; maps cafe, yt lofi, translate hello to spanish or photos beach searches one; from:anna invoice searches Gmail', on: true },
+  { id: 'tabs',      label: 'Open tabs',          hint: 'Switch to a tab that is already open', on: true },
+  { id: 'create',    label: 'Create new',         hint: 'new doc, sheet, slides, form, meeting, event or email, in an account', on: true },
+  { id: 'chrome',    label: 'Chrome pages',       hint: 'settings, downloads, extensions, passwords, clear history', on: true },
+  { id: 'history',   label: 'History',            hint: 'Pages you visited', on: true, permissions: ['history'] },
+  { id: 'bookmarks', label: 'Bookmarks',          hint: 'Your bookmarks', on: true, permissions: ['bookmarks'] },
+  { id: 'topSites',  label: 'Most visited',       hint: 'The sites on Chrome\'s New Tab page', on: true, permissions: ['topSites'] },
+  { id: 'google',    label: 'Google suggestions', hint: 'Searches and sites suggested by Google, online: what you type is sent to Google', on: false, origins: ['https://suggestqueries.google.com/*'] },
+];
+
+// Suggestion source icons, drawn like section icons (Options → Search → Suggestions, Chrome pages in the list)
+const SUGGEST_ICON_PATHS = {
+  calc:      '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="18"/><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"/>',
+  convert:   '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
+  time:      SECTION_ICON_PATHS.recent,
+  currency:  '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  services:  '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+  tabs:      SECTION_ICON_PATHS.tabs,
+  create:    '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
+  chrome:    '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/>',
+  history:   '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/><polyline points="12 7 12 12 15 14"/>',
+  bookmarks: SECTION_ICON_PATHS.bookmarks,
+  topSites:  SECTION_ICON_PATHS.visited,
+  google:    SECTION_ICON_PATHS.search,
+};
+
+function suggestIcon(id, size = 18) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${SUGGEST_ICON_PATHS[id]}</svg>`;
+}
+
+// Saved suggestion sources ({ id, on }[]) in saved order, plus any added since
+function suggestSources(saved) {
+  const known = (Array.isArray(saved) ? saved : []).filter(s => SUGGEST_SOURCES.some(d => d.id === s.id));
+  const missing = SUGGEST_SOURCES.filter(d => !known.some(s => s.id === d.id));
+  return [...known, ...missing].map(s => ({ ...SUGGEST_SOURCES.find(d => d.id === s.id), on: s.on }));
 }
 
 // Stable key for per-account settings (nickname, order): email when known, else #index

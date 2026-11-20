@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, SERVICE_GROUPS, reconcileGroups, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate, ACTION_ICONS, DARK_THEME, drawActionIcon */
+/* global SERVICE_DEFS, SERVICE_GROUPS, reconcileGroups, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, VISITED_EDITS, visitedEditsOf, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate, ACTION_ICONS, DARK_THEME, drawActionIcon */
 
 // Build per-service defaults from shared definitions
 const DEFAULT_SERVICES = Object.fromEntries(
@@ -34,6 +34,11 @@ let state = {
   popupSections: { search: false, accounts: false, tabs: false, recent: false, visited: false, stats: false },
   popupOrder: [],        // launcher + dashboard section ids, in popup order
   searchButtons: { google: true, gmail: true, drive: true },
+  searchLayout: 'separate', // search buttons side by side, or one 'menu' button with every search in its menu
+  searchLabels: 'text',     // search buttons show their 'text', the service's 'icon', or 'both'
+  searchRemember: false,  // with one button: keep the search chosen in its menu
+  searchTypeToFocus: false,  // typing outside a field goes into the search field
+  searchSuggest: suggestSources(null), // where suggestions come from as you type, in order
   dashboardSections: [], // [{ id, label, visible, width }] in display order
   accounts: [],          // dashboard accounts ({ index, email?, name?, photo? }) in display order
   accountOrder: [],      // accountKeys in display order
@@ -81,6 +86,11 @@ function save() {
     popupSections: state.popupSections,
     popupOrder: state.popupOrder,
     searchButtons: state.searchButtons,
+    searchLayout: state.searchLayout,
+    searchLabels: state.searchLabels,
+    searchRemember: state.searchRemember,
+    searchTypeToFocus: state.searchTypeToFocus,
+    searchSuggest: state.searchSuggest.map(({ id, on }) => ({ id, on })),
     dashboardSections: state.dashboardSections.map(({ id, visible, width, title }) => ({ id, visible, width, title })),
     accountOrder: state.accountOrder,
     accountLabels: state.accountLabels,
@@ -493,6 +503,31 @@ document.querySelectorAll('[data-search]').forEach(input => input.addEventListen
   save();
 }));
 
+
+document.getElementById('search-layout').addEventListener('change', (e) => {
+  state.searchLayout = e.target.value;
+  document.getElementById('search-remember-row').hidden = state.searchLayout !== 'menu';
+  save();
+});
+
+document.getElementById('search-labels').addEventListener('change', (e) => {
+  state.searchLabels = e.target.value;
+  save();
+});
+
+// Switches that save their setting as they are
+const SETTING_SWITCHES = {
+  'search-remember': 'searchRemember',
+  'search-type-to-focus': 'searchTypeToFocus',
+};
+
+for (const [id, key] of Object.entries(SETTING_SWITCHES)) {
+  document.getElementById(id).addEventListener('change', (e) => {
+    state[key] = e.target.checked;
+    save();
+  });
+}
+
 // Dashboard title: preset formats (shown as live examples), static text, or a custom format
 const titleSelect = document.getElementById('title-format');
 const titleInput = document.getElementById('title-custom');
@@ -590,6 +625,74 @@ for (const [attr, defaults] of SETTING_CONTROLS) {
     });
   }
 }
+
+// Options → Most visited: the period is for browser history only; My sites only lists every site added;
+// icons per row is for large icons, and columns for small ones
+function renderVisitedSourceRows() {
+  for (const row of document.querySelectorAll('[data-visited-source]')) {
+    row.hidden = !row.dataset.visitedSource.split(' ').includes(state.visitedSource);
+  }
+  for (const select of document.querySelectorAll('[data-visited-icons]')) {
+    select.hidden = select.dataset.visitedIcons !== state.visitedIcons;
+  }
+}
+
+document.querySelector('[data-panel="visitedSource"]').addEventListener('change', renderVisitedSourceRows);
+document.querySelector('[data-panel="visitedIcons"]').addEventListener('change', renderVisitedSourceRows);
+
+// Options → Most visited → Your changes: each of Edit mode's changes, to undo one at a time
+const VISITED_CHANGE_GROUPS = [
+  ['pinned', 'Pinned', 'Unpin'],
+  ['added', 'Added', 'Delete'],
+  ['names', 'Renamed', 'Undo'],
+  ['removed', 'Removed', 'Restore'],
+];
+
+async function renderVisitedEdits() {
+  const { visitedEdits } = await chrome.storage.local.get({ visitedEdits: VISITED_EDITS });
+  const edits = visitedEditsOf(visitedEdits);
+  const items = {
+    pinned: edits.pinned.map(p => ({ key: p.url, name: edits.names[p.url] || p.title || p.url, detail: p.url })),
+    added: edits.added.map(a => ({ key: a.url, name: edits.names[a.url] || a.title, detail: a.url })),
+    names: Object.entries(edits.names).map(([url, name]) => ({ key: url, name, detail: url })),
+    removed: edits.removed.map(host => ({ key: host, name: host, detail: 'Every page of the site' })),
+  };
+  const groups = VISITED_CHANGE_GROUPS.filter(([id]) => items[id].length);
+  document.getElementById('visited-edits').innerHTML = groups.length
+    ? groups.map(([id, label, action]) => `
+      <div class="table-group"><span>${label}</span></div>
+      ${items[id].map(item => `
+        <div class="table-row">
+          <div class="label" title="${esc(`${item.name}\n${item.detail}`)}">${esc(item.name)} <span class="url">${esc(item.detail)}</span></div>
+          <button class="row-btn" data-visited-undo="${id}" data-key="${esc(item.key)}">${action}</button>
+        </div>`).join('')}`).join('')
+    : '<div class="accounts-empty">No changes yet. Pin, add, rename or remove sites with Edit in Most visited.</div>';
+}
+
+// Delete takes an added site's pin, name and place in the order with it
+const VISITED_UNDO = {
+  pinned: (e, url) => ({ pinned: e.pinned.filter(p => p.url !== url) }),
+  added: (e, url) => ({
+    added: e.added.filter(a => a.url !== url),
+    pinned: e.pinned.filter(p => p.url !== url),
+    order: e.order.filter(u => u !== url),
+    names: Object.fromEntries(Object.entries(e.names).filter(([u]) => u !== url)),
+  }),
+  names: (e, url) => ({ names: Object.fromEntries(Object.entries(e.names).filter(([u]) => u !== url)) }),
+  removed: (e, host) => ({ removed: e.removed.filter(h => h !== host) }),
+};
+
+document.getElementById('visited-edits').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-visited-undo]');
+  if (!btn) return;
+  const { visitedEdits } = await chrome.storage.local.get({ visitedEdits: VISITED_EDITS });
+  const edits = visitedEditsOf(visitedEdits);
+  await chrome.storage.local.set({ visitedEdits: { ...edits, ...VISITED_UNDO[btn.dataset.visitedUndo](edits, btn.dataset.key) } });
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.visitedEdits) renderVisitedEdits();
+});
 
 function renderSettingControls() {
   for (const [attr] of SETTING_CONTROLS) {
@@ -765,6 +868,50 @@ makeSortable(document.getElementById('dashboard-accounts'), (from, to) => {
   save();
 });
 
+// Options → Search → Suggestions: drag to order, a switch each. Turning on a source that needs a
+// permission asks for it; refused, the switch goes back off. One that's on without it (granted
+// elsewhere, then removed) offers Allow.
+const suggestPermissions = (s) => ({ permissions: s.permissions ?? [], origins: s.origins ?? [] });
+const needsPermission = (s) => s.permissions || s.origins;
+// A request or check Chrome rejects (a permission missing from the manifest the extension was loaded
+// with) is a refusal
+const requestPermissions = (s) => chrome.permissions.request(suggestPermissions(s)).catch(() => false);
+
+async function renderSuggestSources() {
+  const granted = await Promise.all(state.searchSuggest.map(s => !needsPermission(s) || chrome.permissions.contains(suggestPermissions(s)).catch(() => false)));
+  document.getElementById('suggest-sources').innerHTML = state.searchSuggest.map((s, i) => `
+    <div class="table-row" data-index="${i}">
+      <span class="drag-handle" draggable="true">${SVG_GRIP}</span>
+      <span class="section-icon">${suggestIcon(s.id)}</span>
+      <div class="label">${s.label}<div class="hint">${esc(s.hint)}</div></div>
+      ${s.on && !granted[i] ? '<button type="button" class="row-btn" data-field="allow">Allow</button>' : ''}
+      <label class="switch">
+        <input type="checkbox" data-field="on" ${s.on ? 'checked' : ''}>
+        <span class="slider"></span>
+      </label>
+    </div>`).join('');
+}
+
+makeSortable(document.getElementById('suggest-sources'), (from, to) => {
+  move(state.searchSuggest, from, to);
+  renderSuggestSources();
+  save();
+});
+
+document.getElementById('suggest-sources').addEventListener('change', async (e) => {
+  if (e.target.dataset.field !== 'on') return;
+  const source = state.searchSuggest[Number(e.target.closest('[data-index]').dataset.index)];
+  source.on = e.target.checked && (!needsPermission(source) || await requestPermissions(source));
+  renderSuggestSources();
+  save();
+});
+
+document.getElementById('suggest-sources').addEventListener('click', async (e) => {
+  if (e.target.dataset.field !== 'allow') return;
+  const source = state.searchSuggest[Number(e.target.closest('[data-index]').dataset.index)];
+  if (await requestPermissions(source)) renderSuggestSources();
+});
+
 document.getElementById('dashboard-sections').addEventListener('change', (e) => {
   const section = state.dashboardSections[Number(e.target.closest('[data-index]').dataset.index)];
   if (e.target.dataset.field === 'width') section.width = e.target.value;
@@ -899,7 +1046,7 @@ showTab(location.hash.slice(1));
 // ── Init ───────────────────────────────────────────────────────────────────
 
 chrome.storage.sync.get(
-  { enabled: true, dashboardNewTab: false, newTabTitle: '', actionOpens: 'popup', toolbarIcon: 'default', dashboardIcon: 'default', popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, popupWidth: 'auto', popupSectionsMode: 'expanded', showMenuTitles: true, showMenuServices: true, showMenuGroups: true, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', dashboardTabPosition: 'next', dashboardSectionHeight: '420', dashboardPlacement: 'top', dashboardSize: '1200', ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS, popupSections: {}, popupOrder: null, searchButtons: {}, dashboardSections: null, accountOrder: [], accountLabels: {}, hiddenAccounts: [], manualAccountCount: 1, groups: null, services: {} },
+  { enabled: true, dashboardNewTab: false, newTabTitle: '', actionOpens: 'popup', toolbarIcon: 'default', dashboardIcon: 'default', popupPlacement: 'center', popupSize: 'custom', showPopupTitle: true, popupWidth: 'auto', popupSectionsMode: 'expanded', showMenuTitles: true, showMenuServices: true, showMenuGroups: true, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', dashboardTabPosition: 'next', dashboardSectionHeight: '420', dashboardPlacement: 'top', dashboardSize: '1200', ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS, popupSections: {}, popupOrder: null, searchButtons: {}, searchLayout: 'separate', searchLabels: 'text', searchRemember: false, searchTypeToFocus: false, searchSuggest: null, dashboardSections: null, accountOrder: [], accountLabels: {}, hiddenAccounts: [], manualAccountCount: 1, groups: null, services: {} },
   (data) => {
     state.enabled = data.enabled;
     state.dashboardNewTab = data.dashboardNewTab;
@@ -922,9 +1069,14 @@ chrome.storage.sync.get(
     state.dashboardPlacement = data.dashboardPlacement;
     state.dashboardSize = data.dashboardSize;
     for (const key of Object.keys({ ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS })) state[key] = data[key];
+    if (state.visitedIcons !== 'large') state.visitedIcons = 'small';  // Small (row) and Small (col) became Small
     state.popupSections = { ...state.popupSections, ...data.popupSections };
     state.popupOrder = popupOrder(data.popupOrder);
     state.searchButtons = { ...state.searchButtons, ...data.searchButtons };
+    state.searchLayout = data.searchLayout;
+    state.searchLabels = data.searchLabels;
+    state.searchSuggest = suggestSources(data.searchSuggest);
+    for (const key of Object.values(SETTING_SWITCHES)) state[key] = data[key];
     state.dashboardSections = dashboardSections(data.dashboardSections);
     state.accountLabels = data.accountLabels;
     state.hiddenAccounts = data.hiddenAccounts;
@@ -964,10 +1116,17 @@ chrome.storage.sync.get(
     document.getElementById('dashboard-placement').value = state.dashboardPlacement;
     document.getElementById('dashboard-size').value = state.dashboardSize;
     renderSettingControls();
+    renderVisitedSourceRows();
+    renderVisitedEdits();
     titleMode = titleModeOf(state.dashboardTitleFormat);
     if (titleMode !== 'preset') titleInput.value = state.dashboardTitleFormat.replace(/^text:/, '');
     renderTitleFormat();
     document.querySelectorAll('[data-search]').forEach(input => { input.checked = state.searchButtons[input.dataset.search]; });
+    document.getElementById('search-layout').value = state.searchLayout;
+    document.getElementById('search-labels').value = state.searchLabels;
+    renderSuggestSources();
+    for (const [id, key] of Object.entries(SETTING_SWITCHES)) document.getElementById(id).checked = state[key];
+    document.getElementById('search-remember-row').hidden = state.searchLayout !== 'menu';
     renderDashboardSections();
     renderPopupSections();
 

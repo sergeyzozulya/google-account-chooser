@@ -100,7 +100,9 @@ function embedDashboard(ids, position, open, focus = false) {
   document.body.classList.add('with-dashboard');
   const frame = document.createElement('iframe');
   frame.className = `dashboard-frame ${position}`;
-  frame.src = `dashboard.html?popup=${ids.join(',')}${open === null ? '' : `&accordion=${open}`}${focus ? '&focus' : ''}`;
+  frame.src = `dashboard.html?popup=${ids.join(',')}${open === null ? '' : `&accordion=${open}`}`;
+  // The frame, not a control in it, so the search field doesn't take the focus: the arrow keys start at its first control
+  if (focus) frame.addEventListener('load', () => frame.contentWindow.focus());
   menuEl[position](frame);
   dashboardFrames.push(frame);
   window.addEventListener('message', (e) => {

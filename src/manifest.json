@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Google Account Chooser (and Dashboard)",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Redirects Google service links (Gmail, Meet, Calendar, Drive, etc.) through Account Chooser so you can pick the right account.",
   "minimum_chrome_version": "114",
   "permissions": ["webNavigation", "tabs", "tabGroups", "storage", "alarms", "sidePanel", "declarativeNetRequestWithHostAccess"],
   "optional_permissions": ["history", "bookmarks", "favicon", "topSites"],
+  "optional_host_permissions": ["https://suggestqueries.google.com/*", "https://open.er-api.com/*"],
   "host_permissions": [
     "*://accounts.google.com/*",
     "*://mail.google.com/*"

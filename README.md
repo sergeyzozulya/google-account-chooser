@@ -14,10 +14,10 @@ A Chrome extension that automatically routes Google service links through [Accou
 **Dashboard**
 - All signed-in accounts on one panel: photo, email or nickname, Gmail unread count and unread emails, and a launcher that opens any service directly in that account (no Account Chooser); side by side when the section is full width, one per row otherwise
 - Chrome-style bookmarks bar: bar items, nested folder menus, » overflow and Other bookmarks; narrower than full width, a list whose folders open in place
-- Search Google (default on Enter), or Gmail and Drive in a chosen account via split buttons
+- Search Google (default on Enter), or Gmail and Drive in a chosen account via split buttons, or with one button whose menu lists every search and account; suggestions as you type: calculator and date math, unit and currency conversion, time and time zones, Google services (open one in an account, search one: maps cafe, translate hello to spanish, or Gmail with from:), open tabs, new files in an account, Chrome pages, history, bookmarks, most visited sites and (optional, online) Google's own suggestions, with address completion
 - Open tabs: all tabs or only Google services, grouped by window (installed web apps under their own name), by account or not at all, with close buttons, Chrome tab group colors and optional account avatars
 - Recent Docs/Sheets/Slides/Forms from browser history, grouped by account or type, filtered by type and period, sorted by last opened or most visited, with optional account avatars and a choice of date and time formats; Edit removes files, pins them on top and re-orders pinned ones
-- Most visited: the sites Chrome lists on its New Tab page, with large icons or small ones in a row or a column, with or without names, and a choice of how many to list; Edit adds sites by address, and removes, pins and re-orders them
+- Most visited: the sites Chrome lists on its New Tab page, the sites you visit most counted from browser history over 7, 30 or 90 days, or only sites you add; with large or small icons, a choice of icons per row or columns, with or without names and visit counts, and a choice of how many to list; Edit adds sites by address, removes whole sites, and pins, renames and re-orders them; Options → Most visited lists every change, to undo one at a time
 - Statistics of the services and accounts you open through the extension
 - Bookmarks, Recent files and Most visited need an extra permission, granted with **Turn on** in the section; nothing is requested at install
 - Accounts are detected from your Google session (falling back to Gmail feeds, then a manual count), cached, and refreshed in the background; the dashboard also refreshes when its tab is selected or its window focused
@@ -40,7 +40,7 @@ A Chrome extension that automatically routes Google service links through [Accou
 **Customization**
 - Options → General → Accounts: order (drag and drop), nicknames, and which accounts show
 - Options → Dashboard: section order (drag and drop), width, visibility and title; header title (date-and-time presets, static text or a custom format); where links and new tabs open; placement, size and section height
-- Options → Search: which search buttons show
+- Options → Search: which search buttons show, separate buttons or one button with a menu, text, icon or icon-with-text labels, type to search, and the suggestion sources, each on or off, in the order you drag them to
 - Options → Popup, Gmail, Open tabs, Recent files, Most visited and Launcher: the options above
 
 ## Supported Services
@@ -130,8 +130,9 @@ Everything runs in your browser. The extension doesn't ask you to sign in and do
 | `alarms` | Refreshing the unread badge |
 | `declarativeNetRequestWithHostAccess` | Removing the extension's Origin header from Google's account-list request, which Google otherwise rejects |
 | `sidePanel` | Showing the popup in Chrome's side panel |
-| `history`, `bookmarks`, `topSites`, `favicon` (optional) | Recent files, the bookmarks bar and Most visited, requested only when you turn them on |
+| `history`, `bookmarks`, `topSites`, `favicon` (optional) | Recent files, the bookmarks bar and Most visited, requested only when you turn them on; once granted, also search suggestions |
 | Host permissions (`accounts.google.com`, `mail.google.com`) | Reading the account list, the Gmail unread feed and email threads |
+| Optional host permissions (`suggestqueries.google.com`, `open.er-api.com`) | Google suggestions and currency rates in search, each requested only when you turn it on; with Google suggestions, what you type is sent to Google |
 
 ## License
 

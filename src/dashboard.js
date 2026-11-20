@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, accountFromUrl, accountServiceUrl, accountKey, orderAccounts, dashboardSections, sectionIcon, formatDate, setPageIcon, renderPageIcon */
+/* global SERVICE_DEFS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, VISITED_EDITS, visitedEditsOf, accountFromUrl, accountServiceUrl, accountKey, orderAccounts, dashboardSections, sectionIcon, formatDate, setPageIcon, renderPageIcon */
 
 const DOCS_KINDS = {
   document:     'docs.google.com',
@@ -42,6 +42,12 @@ let tabPosition = 'next'; // where new tabs go: 'next' to the dashboard or at th
 let sections = [];       // [{ id, label, visible, width, title }] in display order
 let launcher = null;     // the open account launcher frame or inbox panel
 let searchButtons = { google: true, gmail: true, drive: true };
+let searchLayout = 'separate';  // search buttons side by side, or one 'menu' button with every search in its menu
+let searchTarget = null;  // with one button: the search it runs, chosen in its menu
+let searchLabels = 'text';  // search buttons show their 'text' ("Gmail: account"), the service's 'icon', or 'both'
+let searchRemember = false;  // with one button: keep the menu's choice (chrome.storage.local searchChoice) across reloads
+let searchTypeToFocus = false;  // typing outside a field goes into the search field
+let searchSuggest = suggestSources(null);  // where suggestions come from as you type, in order: [{ id, on }]
 const searchAccount = {};  // search target → account index chosen in its split button
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c =>
@@ -428,44 +434,93 @@ function setManualCount(count) {
 
 // In button order; the first visible one is the default for Enter
 const SEARCH_TARGETS = {
-  google: { label: 'Google', url: (q) => `https://www.google.com/search?q=${q}` },
-  gmail:  { label: 'Gmail', service: 'mail.google.com',  url: (q, n) => `https://mail.google.com/mail/u/${n}/#search/${q}` },
-  drive:  { label: 'Drive', service: 'drive.google.com', url: (q, n) => `https://drive.google.com/drive/u/${n}/search?q=${q}` },
+  google: { label: 'Google', icon: 'google.webp', url: (q) => `https://www.google.com/search?q=${q}` },
+  gmail:  { label: 'Gmail', icon: 'gmail.webp', service: 'mail.google.com',  url: (q, n) => `https://mail.google.com/mail/u/${n}/#search/${q}` },
+  drive:  { label: 'Drive', icon: 'drive.webp', service: 'drive.google.com', url: (q, n) => `https://drive.google.com/drive/u/${n}/search?q=${q}` },
 };
 
 const searchButtonsEl = document.getElementById('search-buttons');
 
+const accountOption = (a, selected, target = '') => `
+  <button type="button" class="picker-option" role="option" data-account="${a.index}"${target && ` data-target="${target}"`}
+          aria-selected="${selected}">
+    ${avatarHtml(a.photo, displayName(a), 'avatar sm')}<span>${esc(displayName(a))}</span>
+  </button>`;
+
 function renderSearch() {
   const list = shownAccounts();
   const shown = Object.keys(SEARCH_TARGETS).filter(t => searchButtons[t]);
+  for (const t of shown) {
+    if (t !== 'google' && !list.some(a => a.index === searchAccount[t])) searchAccount[t] = list[0]?.index ?? 0;
+  }
+  // "Gmail: account": the service first, which a long account name would otherwise cut off
+  const searchTitle = (t) => {
+    const current = t !== 'google' && list.find(a => a.index === searchAccount[t]);
+    return `${SEARCH_TARGETS[t].label}${current ? `: ${displayName(current)}` : ''}`;
+  };
+  // A button's content: the title, the service icon and the account's avatar with the title as tooltip, or the icon and the title
+  const searchLabel = (t, title) => {
+    if (searchLabels === 'text') return esc(title);
+    const icon = `<img src="icons/${SEARCH_TARGETS[t].icon}" width="20" height="20" alt="">`;
+    if (searchLabels === 'both') return `${icon}<span>${esc(title)}</span>`;
+    const current = t !== 'google' && list.find(a => a.index === searchAccount[t]);
+    return `<img src="icons/${SEARCH_TARGETS[t].icon}" width="20" height="20" alt="${esc(title)}">${current ? avatarHtml(current.photo, displayName(current), 'avatar sm') : ''}`;
+  };
+  document.getElementById('search').classList.toggle('icon-labels', searchLabels !== 'text');
+  document.getElementById('search').classList.toggle('icon-only', searchLabels === 'icon');
+
+  // One button: it runs the search last chosen in its menu, where each search lists its accounts
+  const oneButton = searchLayout === 'menu' && shown.length > 1;
+  document.getElementById('search').classList.toggle('one-button', oneButton);
+  if (oneButton) {
+    if (!shown.includes(searchTarget)) searchTarget = shown[0];
+    const title = searchTitle(searchTarget);
+    // With icons, one control: it opens the menu, and Enter in the field runs the search it shows
+    const single = searchLabels === 'icon';
+    searchButtonsEl.innerHTML = `
+      <div class="split${single ? ' single' : ''}" data-target="${searchTarget}">
+        ${single
+          ? `<button type="button" class="split-toggle" title="${esc(title)} · Choose search" aria-haspopup="listbox" aria-expanded="false">${searchLabel(searchTarget, title)}</button>`
+          : `<button type="submit" value="${searchTarget}" class="split-main search-default" title="${esc(title)}">${searchLabel(searchTarget, title)}</button>
+        <button type="button" class="split-toggle" title="Choose search" aria-haspopup="listbox" aria-expanded="false"></button>`}
+        <div class="picker-menu" role="listbox" hidden>
+          ${shown.map(t => t === 'google'
+            ? `<button type="button" class="picker-option" role="option" data-target="google" aria-selected="${searchTarget === 'google'}"><img src="icons/google.webp" width="18" height="18" alt=""><span>Google</span></button>`
+            : `<div class="picker-group"><img src="icons/${SEARCH_TARGETS[t].icon}" width="14" height="14" alt="">${SEARCH_TARGETS[t].label}</div>
+              ${list.map(a => accountOption(a, searchTarget === t && a.index === searchAccount[t], t)).join('')}`).join('')}
+        </div>
+      </div>`;
+    return;
+  }
 
   searchButtonsEl.innerHTML = shown.map((t, i) => {
     const cls = i === 0 ? 'search-default' : '';
-    if (t === 'google') return `<button type="submit" value="google" class="${cls}">Google</button>`;
+    if (t === 'google') return `<button type="submit" value="google" class="${cls}" title="Google">${searchLabel('google', 'Google')}</button>`;
 
-    if (!list.some(a => a.index === searchAccount[t])) searchAccount[t] = list[0]?.index ?? 0;
-    const current = list.find(a => a.index === searchAccount[t]);
-    const title = `${current ? `${displayName(current)} ` : ''}${SEARCH_TARGETS[t].label}`;
+    const title = searchTitle(t);
     return `
       <div class="split" data-target="${t}">
-        <button type="submit" value="${t}" class="split-main ${cls}" title="${esc(title)}">${esc(title)}</button>
+        <button type="submit" value="${t}" class="split-main ${cls}" title="${esc(title)}">${searchLabel(t, title)}</button>
         <button type="button" class="split-toggle" title="Choose account" aria-haspopup="listbox" aria-expanded="false"></button>
         <div class="picker-menu" role="listbox" hidden>
-          ${list.map(a => `
-            <button type="button" class="picker-option" role="option" data-account="${a.index}"
-                    aria-selected="${a.index === searchAccount[t]}">
-              ${avatarHtml(a.photo, displayName(a), 'avatar sm')}<span>${esc(displayName(a))}</span>
-            </button>`).join('')}
+          ${list.map(a => accountOption(a, a.index === searchAccount[t])).join('')}
         </div>
       </div>`;
   }).join('');
+}
+
+// A remembered choice of the one search button: renderSearch drops a search turned off or an account gone
+function applySearchChoice(choice) {
+  if (!choice) return;
+  searchTarget = choice.target;
+  if (choice.account !== null) searchAccount[choice.target] = choice.account;
 }
 
 function toggleMenu(split, open) {
   const menu = split.querySelector('.picker-menu');
   menu.hidden = !open;
   split.querySelector('.split-toggle').setAttribute('aria-expanded', open);
-  if (open) (menu.querySelector('[aria-selected="true"]') || menu.firstElementChild)?.focus();
+  if (open) (menu.querySelector('[aria-selected="true"]') || menu.querySelector('.picker-option'))?.focus();
 }
 
 function closeMenus() {
@@ -481,11 +536,16 @@ searchButtonsEl.addEventListener('click', (e) => {
     toggleMenu(split, open);
     return;
   }
-  const option = e.target.closest('[data-account]');
+  const option = e.target.closest('.picker-option');
   if (option) {
-    searchAccount[split.dataset.target] = Number(option.dataset.account);
+    const target = option.dataset.target ?? split.dataset.target;
+    searchTarget = target;
+    if (option.dataset.account) searchAccount[target] = Number(option.dataset.account);
+    if (searchLayout === 'menu' && searchRemember) chrome.storage.local.set({ searchChoice: { target, account: searchAccount[target] ?? null } });
     renderSearch();
-    document.getElementById('q').focus();
+    // The one control with icons searches right away for what's typed
+    if (split.classList.contains('single') && qInput.value.trim()) runSearch(target);
+    else document.getElementById('q').focus();
   }
 });
 
@@ -597,7 +657,6 @@ const listed = (messages) => mailSettings.mailListCount === 'all' ? messages : m
 // Avatars and text lines (Options → Gmail) are styles, so lists needn't be redrawn for them
 function applyMailLook() {
   document.body.classList.toggle('no-avatars', !mailSettings.mailAvatars);
-  document.body.classList.toggle('no-list-header', !mailSettings.mailListHeader);
   document.body.classList.toggle('no-snippets', mailSettings.mailSnippetLines === 0);
   document.body.style.setProperty('--snippet-lines', mailSettings.mailSnippetLines || 1);
 }
@@ -650,7 +709,7 @@ function renderMail() {
 
 // With no unread mail there's nothing to list, and signed out there's no list to get: the badge
 // opens Gmail (which asks to sign in)
-// "Inbox" and Open Gmail above a list; hidden in cards by Options → Gmail → List header
+// "Inbox" and Open Gmail above a list
 const inboxHead = (gmailUrl) => `
   <div class="inbox-head">
     <span class="inbox-title">Inbox</span>
@@ -1092,67 +1151,118 @@ async function orderPinnedFiles(ids) {
   await chrome.storage.local.set({ recentPinned: ids.map(id => recentPinned.find(f => f.id === id)) });
 }
 
-// ── Most visited (optional topSites + favicon permissions) ─────────────────
-// Chrome's own list, the one its New Tab page shows
+// ── Most visited (optional favicon permission, plus topSites or history) ───
+// Options → Most visited → Source: Chrome's own list, the one its New Tab page shows; sites counted
+// from browser history; or only the sites added in Edit mode
 
-const VISITED_PERMISSIONS = { permissions: ['topSites', 'favicon'] };
+const VISITED_SOURCES = {
+  chrome: {
+    permissions: ['topSites', 'favicon'],
+    intro: 'Show the sites you visit most, from the list Chrome keeps for its New Tab page. The list stays on this device.',
+    sites: () => chrome.topSites.get(),
+  },
+  history: {
+    permissions: ['history', 'favicon'],
+    intro: 'Show the sites you visit most, counted from your browser history. History stays on this device.',
+    sites: historySites,
+  },
+  mine: {
+    permissions: ['favicon'],
+    intro: 'Show the sites you add yourself, with their icons.',
+    sites: async () => [],
+  },
+};
 
-// Options → Most visited → Icons and Text
-function applyVisitedLook() {
-  const el = document.getElementById('visited');
-  el.classList.toggle('large', panelSettings.visitedIcons === 'large');
-  el.classList.toggle('small-row', panelSettings.visitedIcons === 'small-row');
-  el.classList.toggle('icons-only', !panelSettings.visitedText);
+const visitedSource = () => VISITED_SOURCES[panelSettings.visitedSource] ?? VISITED_SOURCES.chrome;
+const visitedPermissions = () => ({ permissions: visitedSource().permissions });
+const hostOf = (url) => new URL(url).hostname;
+
+// Sites visited in Options → Most visited → Period, by visits. Account Chooser is left out: this
+// extension sends Google links through it, so it would top the list.
+async function historySites() {
+  const items = await chrome.history.search({ text: '', startTime: Date.now() - panelSettings.visitedDays * 864e5, maxResults: 5000 });
+  const sites = new Map();
+  for (const item of items) {
+    let url;
+    try { url = new URL(item.url); } catch { continue; }
+    if (!/^https?:$/.test(url.protocol) || url.hostname === 'accounts.google.com') continue;
+    if (!sites.has(url.origin)) sites.set(url.origin, { url: `${url.origin}/`, title: url.hostname.replace(/^www\./, ''), visits: 0, top: 0 });
+    const site = sites.get(url.origin);
+    site.visits += item.visitCount;
+    // The icon of the site's most visited page: Chrome may have none for a home page never opened
+    if (item.visitCount > site.top) Object.assign(site, { top: item.visitCount, iconUrl: item.url });
+  }
+  return [...sites.values()].sort((a, b) => b.visits - a.visits);
 }
 
-// Edit mode's changes, kept on this device. Chrome's own list isn't changed: removed sites just aren't
-// listed, added and pinned ones ({ url, title }) stay listed even after Chrome drops them, and order
-// ranks urls.
-const VISITED_EDITS = { removed: [], pinned: [], order: [], added: [] };
+// Options → Most visited → Icons (with large icons per row, or small ones' columns) and Text. Small
+// icons in one column are a list like the other sections'; in more, or Auto, they're laid out in a row.
+function applyVisitedLook() {
+  const el = document.getElementById('visited');
+  const large = panelSettings.visitedIcons === 'large';
+  const columns = large ? panelSettings.visitedLargePerRow : panelSettings.visitedColumns;
+  el.classList.toggle('large', large);
+  el.classList.toggle('small-row', !large && columns !== '1');
+  el.classList.toggle('icons-only', !panelSettings.visitedText);
+  el.classList.toggle('fixed-columns', columns !== 'auto');
+  el.style.setProperty('--visited-columns', columns);
+}
+
 let visitedSites = [];  // listed sites, in order
+const VISIT_COUNT = new Intl.NumberFormat(undefined, { notation: 'compact' });  // 1.2K
+let visitedSourceUrls = new Set();  // urls of the sites the source lists, from the last render
 
 async function renderVisited() {
   const el = document.getElementById('visited');
-  const granted = await chrome.permissions.contains(VISITED_PERMISSIONS);
+  const granted = await chrome.permissions.contains(visitedPermissions());
   const editing = sectionEditing.visited;
   renderEditButtons('visited', granted);
 
   if (!granted) {
     el.innerHTML = `
       <div class="empty">
-        Show the sites you visit most, from the list Chrome keeps for its New Tab page.
-        The list stays on this device.<br>
+        ${visitedSource().intro}<br>
         <button class="text-btn" id="visited-on">Turn on</button>
       </div>`;
     return;
   }
 
-  const { removed, pinned, order, added } = await visitedEdits();
-  const top = await chrome.topSites.get();
-  const sites = [...added.filter(a => !top.some(s => s.url === a.url)), ...top];
+  const { removed, pinned, order, added, names } = await visitedEdits();
+  // Removed sites aren't listed from the source; sites added by hand always are
+  const source = (await visitedSource().sites()).filter(s => !removed.includes(hostOf(s.url)));
+  visitedSourceUrls = new Set(source.map(s => s.url));
+  const sites = [...added.filter(a => !source.some(s => s.url === a.url)), ...source];
   const rank = (s) => {
     const i = order.indexOf(s.url);
     return i === -1 ? Infinity : i;
   };
   const inOrder = (list) => [...list].sort((a, b) => rank(a) - rank(b));
   const pins = inOrder(pinned.map(p => sites.find(s => s.url === p.url) ?? p));
-  const rest = inOrder(sites.filter(s => !removed.includes(s.url) && !pinned.some(p => p.url === s.url)));
-  // Pinned sites always show; the others fill up to Options → Most visited → Sites listed
-  visitedSites = [...pins, ...rest.slice(0, Math.max(0, panelSettings.visitedCount - pins.length))];
+  const rest = inOrder(sites.filter(s => !pinned.some(p => p.url === s.url)));
+  // Pinned sites always show; the others fill up to Options → Most visited → Sites listed, which
+  // doesn't limit the sites added by hand alone
+  const room = panelSettings.visitedSource === 'mine' ? Infinity : Math.max(0, panelSettings.visitedCount - pins.length);
+  visitedSites = [...pins, ...rest.slice(0, room)];
 
   const isPinned = (s) => pinned.some(p => p.url === s.url);
-  // In edit mode rows don't open their site: they drag, and carry the pin and remove buttons
+  const name = (s) => names[s.url] || s.title || s.url;
+  // Options → Most visited → Visits
+  const visits = (s) => panelSettings.visitedVisits && panelSettings.visitedSource === 'history' && s.visits
+    ? `<span class="meta" title="${s.visits} ${s.visits === 1 ? 'visit' : 'visits'}">${VISIT_COUNT.format(s.visits)}</span>` : '';
+  // In edit mode rows don't open their site: they drag, the name renames, and they carry the pin
+  // and remove buttons
   const row = (s) => `
     <button class="row" ${editing
       ? `data-item="${esc(s.url)}" draggable="true"`
-      : `data-url="${esc(s.url)}" data-service="${serviceForUrl(s.url) || ''}"`} title="${esc(s.title ? `${s.title}\n${s.url}` : s.url)}">
-      ${bookmarkIcon(s.url, 64)}
-      <span class="title">${esc(s.title || s.url)}</span>
+      : `data-url="${esc(s.url)}" data-service="${serviceForUrl(s.url) || ''}"`} title="${esc(`${name(s)}\n${s.url}`)}">
+      ${bookmarkIcon(s.iconUrl ?? s.url, 64)}
+      <span class="title"${editing ? ` data-visited-rename="${esc(s.url)}" title="Rename"` : ''}>${esc(name(s))}</span>
+      ${visits(s)}
       ${editing ? editButtons(isPinned(s), 'data-visited-pin', 'data-visited-remove', s.url) : ''}
     </button>`;
-  const empty = sites.length
-    ? `All sites are removed. Use Reset${editing ? '' : ' in Edit'} to bring them back.`
-    : `Chrome has no most visited sites yet.${editing ? '' : ' Use Edit to add one.'}`;
+  const empty = panelSettings.visitedSource === 'mine' ? `No sites yet.${editing ? '' : ' Use Edit to add one.'}`
+    : removed.length ? `No sites to list. Use Reset${editing ? '' : ' in Edit'}, or Options → Most visited, to bring back removed ones.`
+    : `No most visited sites yet.${editing ? '' : ' Use Edit to add one.'}`;
   el.innerHTML = (visitedSites.length ? visitedSites.map(row).join('') : `<div class="empty">${empty}</div>`)
     + (editing ? `
       <form id="visited-add">
@@ -1163,7 +1273,7 @@ async function renderVisited() {
 
 async function visitedEdits() {
   const { visitedEdits } = await chrome.storage.local.get({ visitedEdits: VISITED_EDITS });
-  return { ...VISITED_EDITS, ...visitedEdits };
+  return visitedEditsOf(visitedEdits);
 }
 
 async function editVisited(change) {
@@ -1182,12 +1292,12 @@ function siteUrl(text) {
   }
 }
 
-// Added sites start pinned, so Sites listed can't hide them right away
+// Added sites go to the top of the list; adding one brings back its removed site
 function addVisited(url) {
-  const site = { url, title: new URL(url).hostname.replace(/^www\./, '') };
-  return editVisited(({ removed, pinned, added }) => ({
-    removed: removed.filter(u => u !== url),
-    pinned: pinned.some(p => p.url === url) ? pinned : [...pinned, site],
+  const site = { url, title: hostOf(url).replace(/^www\./, '') };
+  return editVisited(({ removed, order, added }) => ({
+    removed: removed.filter(host => host !== hostOf(url)),
+    order: [url, ...order.filter(u => u !== url)],
     added: added.some(a => a.url === url) ? added : [...added, site],
   }));
 }
@@ -1200,13 +1310,46 @@ function toggleVisitedPin(url) {
   });
 }
 
+// Remove hides every page of the site from the source; a site added by hand is deleted
 function removeVisited(url) {
-  return editVisited(({ removed, pinned, order, added }) => ({
-    removed: [...removed, url],
-    pinned: pinned.filter(p => p.url !== url),
-    order: order.filter(u => u !== url),
-    added: added.filter(a => a.url !== url),
-  }));
+  return editVisited(({ removed, pinned, order, added, names }) => {
+    const host = hostOf(url);
+    const keep = (u) => hostOf(u) !== host;
+    const hide = visitedSourceUrls.has(url) || !added.some(a => a.url === url);
+    return {
+      removed: hide ? [...removed, host] : removed,
+      pinned: pinned.filter(p => keep(p.url)),
+      order: order.filter(keep),
+      added: added.filter(a => a.url !== url),
+      names: Object.fromEntries(Object.entries(names).filter(([u]) => keep(u))),
+    };
+  });
+}
+
+// An empty name goes back to the site's own
+function renameVisited(url, name) {
+  return editVisited(({ names }) => {
+    const { [url]: _, ...rest } = names;
+    return { names: name ? { ...rest, [url]: name } : rest };
+  });
+}
+
+// The name in edit mode turns into a field: Enter saves, Escape or leaving it cancels
+function startVisitedRename(title) {
+  const url = title.dataset.visitedRename;
+  const row = title.closest('.row');
+  const form = document.createElement('form');
+  form.className = 'row visited-rename';
+  form.innerHTML = `${row.querySelector('img, svg')?.outerHTML ?? ''}
+    <input name="name" value="${esc(title.textContent)}" placeholder="${esc(visitedSites.find(s => s.url === url)?.title || url)}" aria-label="Site name" autocomplete="off">`;
+  form.dataset.url = url;
+  row.replaceWith(form);
+  const input = form.elements.name;
+  input.select();
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') renderVisited();
+  });
+  input.addEventListener('blur', () => form.isConnected && renderVisited());
 }
 
 // ── Bookmarks bar (optional bookmarks + favicon permissions) ───────────────
@@ -1439,7 +1582,7 @@ async function init() {
   addSectionIcons();
   const data = await chrome.storage.sync.get({
     accountLabels: {}, accountOrder: [], hiddenAccounts: [], manualAccountCount: 1, dashboardSections: null,
-    searchButtons: searchButtons, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', dashboardTabPosition: 'next', dashboardSectionHeight: '420', dashboardPlacement: 'top', dashboardSize: '1200', dashboardIcon: 'default', newTabTitle: '', ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS,
+    searchButtons: searchButtons, searchLayout: 'separate', searchLabels: 'text', searchRemember: false, searchTypeToFocus: false, searchSuggest: null, dashboardTitleFormat: 'auto', dashboardOpenLinks: 'new', dashboardTabPosition: 'next', dashboardSectionHeight: '420', dashboardPlacement: 'top', dashboardSize: '1200', dashboardIcon: 'default', newTabTitle: '', ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS,
   });
   titleFormat = data.dashboardTitleFormat;
   if (!embedded) setPageIcon(document.querySelector('.page-header img'), 64, data.dashboardIcon);
@@ -1458,6 +1601,12 @@ async function init() {
   hiddenAccounts = data.hiddenAccounts;
   manualCount = data.manualAccountCount;
   searchButtons = { ...searchButtons, ...data.searchButtons };
+  searchLayout = data.searchLayout;
+  searchLabels = data.searchLabels;
+  searchRemember = data.searchRemember;
+  searchTypeToFocus = data.searchTypeToFocus;
+  searchSuggest = suggestSources(data.searchSuggest);
+  if (searchRemember) applySearchChoice((await chrome.storage.local.get('searchChoice')).searchChoice);
   sections = dashboardSections(data.dashboardSections);
   if (embedded) {
     document.body.classList.add('embedded');
@@ -1487,8 +1636,6 @@ async function init() {
   }
 
   renderAll();
-  // dashboard.html?popup=…&focus: the popup has no launcher, so its first control takes the focus
-  if (new URLSearchParams(location.search).has('focus')) focusEdge('first');
   refresh();
   scheduleRefresh();
 }
@@ -1512,6 +1659,9 @@ document.addEventListener('click', async (e) => {
 
   const visitedRemove = e.target.closest('[data-visited-remove]');
   if (visitedRemove) { removeVisited(visitedRemove.dataset.visitedRemove); return; }
+
+  const visitedRename = e.target.closest('[data-visited-rename]');
+  if (visitedRename) { startVisitedRename(visitedRename); return; }
 
   const pin = e.target.closest('[data-pin-file]');
   if (pin) { togglePin(pin.dataset.pinFile); return; }
@@ -1554,7 +1704,7 @@ document.addEventListener('click', async (e) => {
 
   if (e.target.id === 'visited-on') {
     try {
-      if (await chrome.permissions.request(VISITED_PERMISSIONS)) renderVisited();
+      if (await chrome.permissions.request(visitedPermissions())) renderVisited();
     } catch (err) {
       e.target.insertAdjacentText('afterend', ` ${err.message}`);
     }
@@ -1707,11 +1857,16 @@ function makeRowsSortable(id, onMove) {
 makeRowsSortable('recent', orderPinnedFiles);
 makeRowsSortable('visited', urls => editVisited(({ order }) => ({ order: [...urls, ...order.filter(url => !urls.includes(url))] })));
 
-// Most visited in edit mode: add a site by its address
+// Most visited in edit mode: add a site by its address, or save its new name
 {
   const list = document.getElementById('visited');
   list.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (e.target.matches('.visited-rename')) {
+      e.target.remove();
+      renameVisited(e.target.dataset.url, e.target.elements.name.value.trim()).then(renderVisited);
+      return;
+    }
     const input = e.target.elements.url;
     const url = siteUrl(input.value);
     if (url) {
@@ -1727,15 +1882,773 @@ makeRowsSortable('visited', urls => editVisited(({ order }) => ({ order: [...url
 document.getElementById('account-add').addEventListener('click', () => setManualCount(accounts.length + 1));
 document.getElementById('account-remove').addEventListener('click', () => setManualCount(Math.max(1, accounts.length - 1)));
 
-document.getElementById('search').addEventListener('submit', (e) => {
+// Options → Search → Type to search: a character typed outside a field moves focus to the search
+// field, which then gets it. Space still scrolls, and shortcuts are left alone.
+document.addEventListener('keydown', (e) => {
+  if (!searchTypeToFocus || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key.length !== 1 || e.key === ' ' || e.target.closest('input, textarea, select, [contenteditable]')) return;
+  const q = document.getElementById('q');
+  if (q.getClientRects().length) q.focus();
+});
+
+// ── Search suggestions (Options → Search → Suggestions) ───────────────────
+// Like Chrome's address bar: answers (calculator, units, time), Gmail search words, open tabs,
+// Google services and new files in an account, sites from browser history, bookmarks and most
+// visited, and Google's own suggestions, each when it's turned on there (and its permission is
+// granted), in the order set there. The best site whose address starts with what's typed completes
+// it in the field, selected, so typing on replaces it; ↑ and ↓ pick a suggestion and Enter or a
+// click runs it.
+
+const qInput = document.getElementById('q');
+const suggestEl = document.createElement('div');
+suggestEl.className = 'suggestions';
+suggestEl.setAttribute('role', 'listbox');
+suggestEl.hidden = true;
+qInput.closest('.search-field').append(suggestEl);
+
+// A suggestion: { icon, title, detail, kind, fill (put in the field by ↑ and ↓), and what it does:
+// url (+ service) to open, chromeUrl (a Chrome page) to open, tabId to switch to, or copy to put in
+// the field and on the clipboard }
+let suggestions = [];    // shown, in order
+let suggestIndex = -1;   // the one picked with ↑ and ↓, or -1 for what's typed
+let typedText = '';      // what's typed, without the completion
+let completion = null;   // the suggestion completing the field, if any
+let suggestRun = 0;      // the latest lookup; older ones that finish later are dropped
+const SUGGEST_LIMIT = 8;
+
+const bareUrl = (url) => url.replace(/^https?:\/\/(www\.)?/i, '');
+const serviceIcon = (host) => SERVICE_DEFS[host]?.icon ?? '';
+
+// Sites from browser history, bookmarks and most visited: [{ url, title, sources, prefix, score }] best first
+async function lookupSites(text, wanted) {
+  const [history, bookmarks, topSites] = await Promise.all(['history', 'bookmarks', 'topSites']
+    .map(p => wanted.has(p) && chrome.permissions.contains({ permissions: [p] })));
+  if (!history && !bookmarks && !topSites) return [];
+  // Chrome's own search may miss a word still being typed ("blaze w"), so it gets the longest word
+  // only, and history's latest pages are looked through as well; every word is matched below
+  const longest = text.split(/\s+/).reduce((a, b) => (b.length > a.length ? b : a), '');
+  const [found, latest, marked, top] = await Promise.all([
+    history ? chrome.history.search({ text: longest, startTime: 0, maxResults: 500 }) : [],
+    history ? chrome.history.search({ text: '', startTime: 0, maxResults: 1000 }) : [],
+    bookmarks ? chrome.bookmarks.search(longest) : [],
+    topSites ? chrome.topSites.get() : [],
+  ]);
+  const visited = [...new Map([...latest, ...found].map(h => [h.url, h])).values()];
+  const sites = new Map();  // url → { url, title, weight, sources }
+  const add = (url, title, weight, sources) => {
+    if (!url || !/^https?:/i.test(url) || new URL(url).hostname === 'accounts.google.com') return;
+    const site = sites.get(url) ?? { url, title: title || '', weight: 0, sources: new Set() };
+    site.weight += weight;
+    sources.forEach(source => site.sources.add(source));
+    if (!site.title && title) site.title = title;
+    sites.set(url, site);
+  };
+  for (const h of visited) add(h.url, h.title, Math.log1p(h.visitCount + 5 * h.typedCount) + (Date.now() - h.lastVisitTime < 7 * 864e5 ? 1 : 0), ['history']);
+  for (const b of marked) add(b.url, b.title, 3, ['bookmarks']);
+  for (const t of top) add(t.url, t.title, 2, ['topSites']);
+  // A site typed by its address also suggests its home page, which is what the field completes to
+  const lower = text.toLowerCase();
+  for (const site of [...sites.values()]) {
+    const u = new URL(site.url);
+    if (bareUrl(u.origin).toLowerCase().startsWith(lower) && !sites.has(`${u.origin}/`)) add(`${u.origin}/`, u.hostname.replace(/^www\./, ''), site.weight / 2, site.sources);
+  }
+
+  // Where the text matches: the start of the address, then the start of a word in the title or of a
+  // part of the address, then anywhere; every word typed has to match. A title with what's typed in
+  // it as a phrase ranks above them, as a file's or page's name usually is what's typed.
+  const escape = (w) => w.replace(/[.*+?^$()|[\]{}\\]/g, '\\$&');
+  const words = lower.split(/\s+/).filter(Boolean);
+  const gap = '[^\\p{L}\\p{N}]';  // not a letter or digit, in any script
+  // Each word typed starts a word of the title, one after another: "blaz webs" in "Blaze Website"
+  const phrase = new RegExp(`(^|${gap})${words.map(escape).join(`[\\p{L}\\p{N}]*${gap}+`)}`, 'u');
+  const scored = [...sites.values()].map(site => {
+    const address = bareUrl(site.url).toLowerCase();
+    const title = site.title.toLowerCase();
+    const at = (w) => address.startsWith(w) ? 4
+      : new RegExp(`(^|${gap})${escape(w)}`, 'u').test(title) || new RegExp(`[./?=&_-]${escape(w)}`).test(address) ? 3
+      : address.includes(w) || title.includes(w) ? 1 : 0;
+    const match = words.map(at);
+    // A typed word that's a whole word of the title, like "blaze" in "Blaze Website" but not in
+    // "blazereviews", counts a little more
+    const whole = words.filter(w => new RegExp(`(^|${gap})${escape(w)}(${gap}|$)`, 'u').test(title)).length;
+    const score = match.includes(0) ? 0 : Math.min(...match) * 10 + (phrase.test(title) ? 15 : 0) + whole * 4 + site.weight;
+    return { ...site, prefix: address.startsWith(lower), score };
+  }).filter(s => s.score > 0);
+  scored.sort((a, b) => b.prefix - a.prefix || b.score - a.score || a.url.length - b.url.length);
+  return scored.slice(0, 6);
+}
+
+// What a site is: a Docs, Sheets, Slides or Forms file, or else where it came from, a bookmark
+// first, as Chrome's address bar marks them
+const FILE_KINDS = { document: 'Document', spreadsheets: 'Spreadsheet', presentation: 'Presentation', forms: 'Form' };
+
+function siteKind(s) {
+  const file = s.url.match(/^https:\/\/docs\.google\.com\/(document|spreadsheets|presentation|forms)\/(?:u\/\d+\/)?d\//);
+  if (file) return FILE_KINDS[file[1]];
+  if (s.sources.has('bookmarks')) return 'Bookmark';
+  if (s.sources.has('topSites')) return 'Most visited';
+  return 'History';
+}
+
+const siteSuggestion = (s) => ({
+  icon: bookmarkIcon(s.url), title: s.title || bareUrl(s.url), detail: bareUrl(s.url), kind: siteKind(s),
+  url: s.url, fill: bareUrl(s.url).replace(/\/$/, ''), prefix: s.prefix, sources: s.sources,
+});
+
+// A number as people write it, rounded off floating-point noise
+const formatNumber = (n, digits = 12) => Number(n.toPrecision(digits)).toLocaleString(undefined, { maximumFractionDigits: 10 });
+const plainNumber = (n, digits = 12) => String(Number(n.toPrecision(digits)));
+
+// Calculator: + - * / ^, ( ), % after a number (15% of 80 too), pi, e, sqrt, sin, cos, tan, log, ln, abs, round
+const CALC_FUNCTIONS = { sqrt: Math.sqrt, sin: Math.sin, cos: Math.cos, tan: Math.tan, log: Math.log10, ln: Math.log, abs: Math.abs, round: Math.round };
+
+function calculate(text) {
+  const source = text.replace(/^=\s*/, '').toLowerCase().replace(/×/g, '*').replace(/÷/g, '/').replace(/%\s*of\b/g, '%*');
+  if (!/\d/.test(source) || !/[-+*/^%(]|[a-z]/.test(source.replace(/^-/, ''))) return null;
+  const tokens = source.match(/\d*\.?\d+(?:e[-+]?\d+)?|[a-z]+|\*\*|[-+*/^%()]|\S/g);
+  let i = 0;
+  const peek = () => tokens[i];
+  const fail = () => { throw new Error('not a calculation'); };
+  const expect = (t) => (tokens[i++] === t ? t : fail());
+  const expr = () => {
+    let v = term();
+    while (peek() === '+' || peek() === '-') v = tokens[i++] === '+' ? v + term() : v - term();
+    return v;
+  };
+  const term = () => {
+    let v = power();
+    while (peek() === '*' || peek() === '/') v = tokens[i++] === '*' ? v * power() : v / power();
+    return v;
+  };
+  const power = () => {
+    const v = unary();
+    if (peek() === '^' || peek() === '**') { i++; return v ** power(); }
+    return v;
+  };
+  const unary = () => {
+    if (peek() === '-') { i++; return -unary(); }
+    if (peek() === '+') { i++; return unary(); }
+    let v = primary();
+    while (peek() === '%') { i++; v /= 100; }
+    return v;
+  };
+  const primary = () => {
+    const t = tokens[i++];
+    if (t === undefined) fail();
+    if (/^\d|^\./.test(t)) return Number(t);
+    if (t === '(') { const v = expr(); expect(')'); return v; }
+    if (t === 'pi') return Math.PI;
+    if (t === 'e') return Math.E;
+    if (CALC_FUNCTIONS[t]) { expect('('); const v = expr(); expect(')'); return CALC_FUNCTIONS[t](v); }
+    return fail();
+  };
+  try {
+    const value = expr();
+    return i === tokens.length && Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function calcSuggestions(text) {
+  const date = dateMath(text);
+  if (date) return [{ icon: suggestIcon('calc', 16), title: date.title, detail: date.detail, kind: 'Date', copy: date.title, fill: text }];
+  const value = calculate(text);
+  if (value === null) return [];
+  return [{ icon: suggestIcon('calc', 16), title: formatNumber(value), detail: text.replace(/^=\s*/, ''), kind: 'Calculator', copy: plainNumber(value), fill: text }];
+}
+
+// Date math: today, tomorrow, yesterday, 2026-12-25, dec 25, 25 december 2026; days until or since
+// a date, a date plus or minus days, weeks, months or years, the days between two dates, the week
+// number. A date without a year is the next one (until) or the last one (since).
+const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const DAY_MS = 864e5;
+const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const longDate = (d) => d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const daysBetween = (a, b) => Math.round((b - a) / DAY_MS);
+
+function parseDate(text) {
+  const t = text.trim().toLowerCase().replace(/,/g, '');
+  const today = startOfToday();
+  const shift = { today: 0, tomorrow: 1, yesterday: -1 }[t];
+  if (shift !== undefined) return { date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + shift), year: true };
+  const month = (name) => (name.length >= 3 ? MONTH_NAMES.findIndex(m => m.startsWith(name.replace(/\.$/, ''))) : -1);
+  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return { date: new Date(m[1], m[2] - 1, m[3]), year: true };
+  m = t.match(/^([a-z.]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s+(\d{4}))?$/) ?? t.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z.]+)(?:\s+(\d{4}))?$/)?.slice(0, 4);
+  if (!m) return null;
+  const [name, day] = /^\d/.test(m[1]) ? [m[2], m[1]] : [m[1], m[2]];
+  const index = month(name);
+  if (index < 0 || day < 1 || day > 31) return null;
+  return { date: new Date(m[3] ?? today.getFullYear(), index, day), year: Boolean(m[3]) };
+}
+
+function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / DAY_MS + 1) / 7);
+}
+
+function dateMath(text) {
+  const t = text.trim().toLowerCase();
+  const today = startOfToday();
+  const days = (n) => `${n.toLocaleString()} ${Math.abs(n) === 1 ? 'day' : 'days'}${Math.abs(n) >= 14 ? ` (${Math.floor(Math.abs(n) / 7)} weeks${Math.abs(n) % 7 ? ` ${Math.abs(n) % 7} d` : ''})` : ''}`;
+  let m = t.match(/^(?:how many\s+)?(?:days\s+)?(until|till|to|since)\s+(.+)$/);
+  if (m) {
+    const d = parseDate(m[2]);
+    if (!d) return null;
+    const since = m[1] === 'since';
+    if (!d.year && (since ? d.date > today : d.date < today)) d.date.setFullYear(d.date.getFullYear() + (since ? -1 : 1));
+    return { title: days(since ? daysBetween(d.date, today) : daysBetween(today, d.date)), detail: `${since ? 'since' : 'until'} ${longDate(d.date)}` };
+  }
+  m = t.match(/^(.+?)\s*([+-])\s*(\d+)\s*(d|days?|w|weeks?|m|months?|y|years?)$/);
+  if (m) {
+    const d = parseDate(m[1]);
+    if (!d) return null;
+    const n = Number(m[3]) * (m[2] === '-' ? -1 : 1);
+    const date = new Date(d.date);
+    const unit = m[4][0];
+    if (unit === 'd' || unit === 'w') date.setDate(date.getDate() + n * (unit === 'w' ? 7 : 1));
+    else date.setMonth(date.getMonth() + n * (unit === 'y' ? 12 : 1));
+    return { title: longDate(date), detail: `${m[1]} ${m[2]} ${m[3]} ${m[4]}` };
+  }
+  m = t.match(/^(.+?)\s+-\s+(.+)$/);
+  if (m) {
+    const [a, b] = [parseDate(m[1]), parseDate(m[2])];
+    if (!a || !b) return null;
+    return { title: days(daysBetween(b.date, a.date)), detail: `from ${longDate(b.date)} to ${longDate(a.date)}` };
+  }
+  m = t.match(/^week(?:\s+(?:number|no\.?|#))?(?:\s+(?:of\s+)?(.+))?$/);
+  if (m) {
+    const d = m[1] ? parseDate(m[1]) : { date: today };
+    if (!d) return null;
+    return { title: `Week ${isoWeek(d.date)}`, detail: longDate(d.date) };
+  }
+  const d = parseDate(t);
+  if (!d) return null;
+  const n = daysBetween(today, d.date);
+  return { title: longDate(d.date), detail: n === 0 ? 'today' : n > 0 ? `in ${days(n)}` : `${days(-n)} ago` };
+}
+
+// Units by kind, each as its size in the kind's base unit; temperatures convert by formula
+const UNITS = {
+  length: { m: 1, meter: 1, metre: 1, mm: 1e-3, cm: 1e-2, km: 1e3, kilometer: 1e3, kilometre: 1e3, in: .0254, inch: .0254, ft: .3048, foot: .3048, feet: .3048, yd: .9144, yard: .9144, mi: 1609.344, mile: 1609.344, nmi: 1852 },
+  mass: { g: 1, gram: 1, mg: 1e-3, kg: 1e3, kilogram: 1e3, t: 1e6, ton: 1e6, tonne: 1e6, oz: 28.349523125, ounce: 28.349523125, lb: 453.59237, pound: 453.59237, st: 6350.29318, stone: 6350.29318 },
+  volume: { l: 1, liter: 1, litre: 1, ml: 1e-3, cl: 1e-2, dl: .1, gal: 3.785411784, gallon: 3.785411784, qt: .946352946, quart: .946352946, pt: .473176473, pint: .473176473, cup: .2365882365, floz: .0295735295625, tbsp: .01478676478125, tsp: .00492892159375 },
+  speed: { 'm/s': 1, 'km/h': 1 / 3.6, kmh: 1 / 3.6, kph: 1 / 3.6, mph: .44704, kn: .514444, knot: .514444 },
+  data: { b: 1, byte: 1, kb: 1e3, mb: 1e6, gb: 1e9, tb: 1e12, kib: 1024, mib: 1024 ** 2, gib: 1024 ** 3, tib: 1024 ** 4 },
+};
+const TEMPERATURES = {
+  c: { toK: v => v + 273.15, fromK: k => k - 273.15, name: '°C' },
+  f: { toK: v => (v - 32) * 5 / 9 + 273.15, fromK: k => (k - 273.15) * 9 / 5 + 32, name: '°F' },
+  k: { toK: v => v, fromK: k => k, name: 'K' },
+};
+const TEMPERATURE_NAMES = { celsius: 'c', fahrenheit: 'f', kelvin: 'k' };
+
+// A unit as typed: lower case, without ° and spaces, and singular ("miles", "fl oz", "°F")
+function unitOf(text) {
+  let u = text.toLowerCase().replace(/[°\s.]/g, '');
+  if (TEMPERATURES[u] || TEMPERATURE_NAMES[u]) return { temperature: TEMPERATURES[u] ? u : TEMPERATURE_NAMES[u] };
+  for (const name of [u, u.replace(/e?s$/, ''), u.replace(/s$/, '')]) {
+    for (const [kind, units] of Object.entries(UNITS)) if (units[name]) return { kind, size: units[name], name };
+  }
+  return null;
+}
+
+function convertSuggestions(text) {
+  const m = text.match(/^(-?\d*\.?\d+)\s*([a-z°/ .]+?)\s+(?:in|to|into|as|=)\s+([a-z°/ .]+?)$/i);
+  if (!m) return [];
+  const value = Number(m[1]);
+  const from = unitOf(m[2]);
+  const to = unitOf(m[3]);
+  if (!from || !to) return [];
+  let result;
+  let toName = m[3].trim();
+  if (from.temperature && to.temperature) {
+    result = TEMPERATURES[to.temperature].fromK(TEMPERATURES[from.temperature].toK(value));
+    toName = TEMPERATURES[to.temperature].name;
+  } else if (from.kind && from.kind === to.kind) {
+    result = value * from.size / to.size;
+  } else {
+    return [];
+  }
+  return [{ icon: suggestIcon('convert', 16), title: `${formatNumber(result, 6)} ${toName}`, detail: text, kind: 'Conversion', copy: plainNumber(result, 6), fill: text }];
+}
+
+// Time in a city: its time zone by the city's name in the zone (Tokyo, New York), or a common city
+// or name that isn't one
+const TIME_ALIASES = {
+  utc: 'UTC', gmt: 'UTC', nyc: 'America/New_York', boston: 'America/New_York', washington: 'America/New_York', miami: 'America/New_York',
+  atlanta: 'America/New_York', philadelphia: 'America/New_York', montreal: 'America/Toronto', ottawa: 'America/Toronto',
+  'san francisco': 'America/Los_Angeles', sf: 'America/Los_Angeles', seattle: 'America/Los_Angeles', la: 'America/Los_Angeles',
+  'san diego': 'America/Los_Angeles', 'las vegas': 'America/Los_Angeles', dallas: 'America/Chicago', houston: 'America/Chicago',
+  austin: 'America/Chicago', beijing: 'Asia/Shanghai', 'hong kong': 'Asia/Hong_Kong', delhi: 'Asia/Kolkata', 'new delhi': 'Asia/Kolkata',
+  mumbai: 'Asia/Kolkata', bangalore: 'Asia/Kolkata', bengaluru: 'Asia/Kolkata', osaka: 'Asia/Tokyo', kyoto: 'Asia/Tokyo',
+  kyiv: 'Europe/Kiev', kiev: 'Europe/Kiev', munich: 'Europe/Berlin', frankfurt: 'Europe/Berlin', hamburg: 'Europe/Berlin',
+  barcelona: 'Europe/Madrid', milan: 'Europe/Rome', 'st petersburg': 'Europe/Moscow', 'tel aviv': 'Asia/Jerusalem',
+  geneva: 'Europe/Zurich', 'abu dhabi': 'Asia/Dubai', 'ho chi minh': 'Asia/Ho_Chi_Minh', 'rio de janeiro': 'America/Sao_Paulo',
+};
+let timeZones = null;  // [[city, zone]] from the browser's time zone list
+
+function zonesFor(place) {
+  timeZones ??= (Intl.supportedValuesOf?.('timeZone') ?? []).map(z => [z.split('/').pop().replace(/_/g, ' ').toLowerCase(), z]);
+  // A short name (nyc, sf) shows as the zone's city
+  const alias = TIME_ALIASES[place];
+  if (alias) return [[place.length > 3 ? place : alias.split('/').pop().replace(/_/g, ' ').toLowerCase(), alias]];
+  const exact = timeZones.filter(([city]) => city === place);
+  if (exact.length) return exact;
+  return place.length >= 3 ? timeZones.filter(([city]) => city.startsWith(place)).slice(0, 2) : [];
+}
+
+// The offset of a time zone from UTC at a moment, in ms
+function zoneOffset(zone, date) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' })
+    .formatToParts(date).map(x => [x.type, Number(x.value)]));
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(date / 1000) * 1000;
+}
+
+// The moment it's h:m today in a time zone; the offset is taken again at the first guess, for a
+// day the clocks change
+function wallClock(zone, h, m) {
+  const now = new Date();
+  const there = new Date(now.getTime() + zoneOffset(zone, now));
+  const utc = Date.UTC(there.getUTCFullYear(), there.getUTCMonth(), there.getUTCDate(), h, m);
+  const guess = utc - zoneOffset(zone, new Date(utc));
+  return new Date(utc - zoneOffset(zone, new Date(guess)));
+}
+
+// A time of day as typed: 3pm, 3:30 pm, 15:00, noon, midnight; a bare number isn't one
+function parseClock(text) {
+  if (text === 'noon') return [12, 0];
+  if (text === 'midnight') return [0, 0];
+  const m = text.match(/^(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?$/);
+  if (!m || (!m[2] && !m[3])) return null;
+  let h = Number(m[1]);
+  const min = Number(m[2] ?? 0);
+  if (min > 59 || h > 23 || (m[3] && (h < 1 || h > 12))) return null;
+  if (m[3]) h = h % 12 + (m[3][0] === 'p' ? 12 : 0);
+  return [h, min];
+}
+
+const LOCAL_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const zoneName = (city, zone) => (zone === 'UTC' ? 'UTC' : city.replace(/\b\p{L}/gu, c => c.toUpperCase()));
+const zoneOffsetName = (zone, date) => new Intl.DateTimeFormat('en', { timeZone: zone, timeZoneName: 'shortOffset' }).formatToParts(date).find(p => p.type === 'timeZoneName')?.value ?? '';
+const timeIn = (zone, date) => date.toLocaleTimeString(undefined, { timeZone: zone, hour: 'numeric', minute: '2-digit' });
+const dayIn = (zone, date) => date.toLocaleDateString(undefined, { timeZone: zone, weekday: 'long', day: 'numeric', month: 'long' });
+const placeZone = (place) => (/^(local|here|my time)$/.test(place) ? ['your time', LOCAL_ZONE] : zonesFor(place)[0]);
+
+// "time tokyo" or "tokyo time": the time there now. "3pm london in tokyo", or "3pm in tokyo" from
+// your time, or "3pm london" to your time: that time today in another time zone.
+function timeSuggestions(text) {
+  const t = text.toLowerCase().trim();
+  const clock = t.match(/^(\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?|noon|midnight)(?:\s+(?!(?:in|to)\s)(.+?))?(?:\s+(?:in|to)\s+(.+))?$/);
+  const hm = clock && parseClock(clock[1].trim());
+  if (hm && (clock[2] || clock[3])) {
+    const from = clock[2] ? placeZone(clock[2]) : ['your time', LOCAL_ZONE];
+    const to = clock[3] ? placeZone(clock[3]) : ['your time', LOCAL_ZONE];
+    if (!from || !to || from[1] === to[1]) return [];
+    const at = wallClock(from[1], ...hm);
+    const time = timeIn(to[1], at);
+    const toName = to[0] === 'your time' ? 'your time' : zoneName(...to);
+    const fromName = from[0] === 'your time' ? 'your time' : zoneName(...from);
+    return [{ icon: suggestIcon('time', 16), title: `${time} ${toName === 'your time' ? 'your time' : `in ${toName}`}`,
+      detail: `${timeIn(from[1], at)} ${fromName === 'your time' ? 'your time' : `in ${fromName}`} · ${dayIn(to[1], at)} · ${zoneOffsetName(to[1], at)}`,
+      kind: 'Time', copy: time, fill: text }];
+  }
+  const m = t.match(/^(?:time\s+(?:in\s+)?(.+)|(.+?)\s+time)$/);
+  if (!m) return [];
+  const now = new Date();
+  return zonesFor((m[1] ?? m[2]).trim()).map(([city, zone]) => {
+    const time = timeIn(zone, now);
+    return { icon: suggestIcon('time', 16), title: `${time} in ${zoneName(city, zone)}`, detail: `${dayIn(zone, now)} · ${zoneOffsetName(zone, now)}`, kind: 'Time', copy: time, fill: text };
+  });
+}
+
+// Currencies, with ExchangeRate-API's free daily rates for about 160 currencies (Options → Search →
+// Suggestions → Currency conversion and its permission), fetched at most every 6 hours and kept on
+// this device. Codes (usd) or symbols ($).
+const CURRENCY_RATES = 'https://open.er-api.com/v6/latest/EUR';
+const CURRENCY_SYMBOLS = { '$': 'USD', '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₴': 'UAH', '₹': 'INR', '₩': 'KRW', '₺': 'TRY', '₪': 'ILS', '₽': 'RUB', '₱': 'PHP', '฿': 'THB', '₫': 'VND', '₦': 'NGN', '₸': 'KZT', '₾': 'GEL', 'zł': 'PLN', 'kč': 'CZK', 'r$': 'BRL', 'c$': 'CAD', 'a$': 'AUD', 'hk$': 'HKD' };
+let ratesRequest = null;
+
+function currencyRates() {
+  ratesRequest ??= (async () => {
+    const { exchangeRates: cached } = await chrome.storage.local.get('exchangeRates');
+    if (cached && Date.now() - cached.fetchedAt < 6 * 36e5) return cached;
+    if (!await chrome.permissions.contains({ origins: SUGGEST_SOURCES.find(s => s.id === 'currency').origins })) return cached ?? null;
+    try {
+      const data = await (await fetch(CURRENCY_RATES)).json();
+      if (data.result !== 'success') return cached ?? null;
+      const fresh = { updated: data.time_last_update_unix * 1000, rates: data.rates, fetchedAt: Date.now() };
+      chrome.storage.local.set({ exchangeRates: fresh });
+      return fresh;
+    } catch {
+      return cached ?? null;
+    }
+  })().finally(() => { ratesRequest = null; });
+  return ratesRequest;
+}
+
+async function currencySuggestions(text) {
+  const unit = '(zł|kč|r\\$|c\\$|a\\$|hk\\$|[$€£¥₴₹₩₺₪₽₱฿₫₦₸₾]|[a-z]{3})';
+  const m = text.toLowerCase().trim().match(new RegExp(`^${unit}?\\s*(\\d[\\d,]*(?:\\.\\d+)?)?\\s*${unit}?\\s+(?:in|to|into|=)\\s+${unit}$`));
+  if (!m || Boolean(m[1]) === Boolean(m[3])) return [];
+  const code = (u) => CURRENCY_SYMBOLS[u] ?? u.toUpperCase();
+  const [from, to] = [code(m[1] ?? m[3]), code(m[4])];
+  const data = await currencyRates();
+  if (!data || !data.rates[from] || !data.rates[to] || from === to) return [];
+  const amount = Number((m[2] ?? '1').replace(/,/g, ''));
+  const result = amount / data.rates[from] * data.rates[to];
+  const money = (n, c) => n.toLocaleString(undefined, { style: 'currency', currency: c });
+  return [{ icon: suggestIcon('currency', 16), title: money(result, to), detail: `${money(amount, from)} · rate of ${new Date(data.updated).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}, by ExchangeRate-API`, kind: 'Currency', copy: result.toFixed(2), fill: text }];
+}
+
+// Chrome's own pages, by name: "settings", "downloads", "clear history"
+const CHROME_PAGES = [
+  { label: 'Settings', url: 'chrome://settings', words: ['settings', 'preferences', 'options'] },
+  { label: 'History', url: 'chrome://history', words: ['history'] },
+  { label: 'Downloads', url: 'chrome://downloads', words: ['downloads'] },
+  { label: 'Extensions', url: 'chrome://extensions', words: ['extensions', 'add-ons', 'addons'] },
+  { label: 'Bookmark manager', url: 'chrome://bookmarks', words: ['bookmarks', 'bookmark manager'] },
+  { label: 'Password manager', url: 'chrome://password-manager', words: ['passwords', 'password manager'] },
+  { label: 'Clear browsing data', url: 'chrome://settings/clearBrowserData', words: ['clear history', 'clear browsing data', 'clear cache', 'clear cookies', 'delete history'] },
+  { label: 'Autofill and payments', url: 'chrome://settings/autofill', words: ['autofill', 'payment methods', 'addresses'] },
+  { label: 'Privacy and security', url: 'chrome://settings/privacy', words: ['privacy', 'security'] },
+  { label: 'Site settings', url: 'chrome://settings/content', words: ['site settings', 'permissions', 'cookies'] },
+  { label: 'Search engines', url: 'chrome://settings/searchEngines', words: ['search engines', 'site search'] },
+  { label: 'Default browser', url: 'chrome://settings/defaultBrowser', words: ['default browser'] },
+  { label: 'About Chrome', url: 'chrome://settings/help', words: ['about chrome', 'update chrome', 'chrome version', 'version'] },
+  { label: 'Flags', url: 'chrome://flags', words: ['flags', 'experiments'] },
+  { label: 'Apps', url: 'chrome://apps', words: ['apps'] },
+];
+
+function chromeSuggestions(text) {
+  const t = text.toLowerCase().trim().replace(/^chrome:\/\/|^chrome\s+/, '');
+  if (t.length < 3) return [];
+  return CHROME_PAGES.filter(p => p.words.some(w => w.startsWith(t)) || p.url.slice(9).startsWith(t)).slice(0, 3).map(p => ({
+    icon: suggestIcon('chrome', 16), title: p.label, detail: p.url, kind: 'Chrome', chromeUrl: p.url, fill: p.url,
+  }));
+}
+
+// Search a Google service: a name, then what to search for ("maps cafe", "yt lofi"). Services
+// with accounts get one row per account; "translate hello to spanish" picks the language.
+const SITE_SEARCHES = [
+  { keys: ['maps', 'map'], host: 'maps.google.com', account: true, url: (q, n) => `https://www.google.com/maps/search/${q}?authuser=${n}` },
+  { keys: ['youtube', 'yt'], label: 'YouTube', url: q => `https://www.youtube.com/results?search_query=${q}` },
+  { keys: ['translate', 'tr'], label: 'Translate', translate: true },
+  { keys: ['images', 'image', 'img'], label: 'Google Images', url: q => `https://www.google.com/search?tbm=isch&q=${q}` },
+  { keys: ['news'], label: 'Google News', url: q => `https://www.google.com/search?tbm=nws&q=${q}` },
+  { keys: ['photos'], host: 'photos.google.com', account: true, url: (q, n) => `https://photos.google.com/u/${n}/search/${q}` },
+  { keys: ['drive'], host: 'drive.google.com', account: true, url: (q, n) => SEARCH_TARGETS.drive.url(q, n) },
+  { keys: ['gmail', 'mail'], host: 'mail.google.com', account: true, url: (q, n) => SEARCH_TARGETS.gmail.url(q, n) },
+  { keys: ['calendar', 'cal'], host: 'calendar.google.com', account: true, url: (q, n) => `https://calendar.google.com/calendar/u/${n}/r/search?q=${q}` },
+  { keys: ['keep'], host: 'keep.google.com', account: true, url: (q, n) => `https://keep.google.com/u/${n}/#search/text%3D${q}` },
+  { keys: ['contacts'], host: 'contacts.google.com', account: true, url: (q, n) => `https://contacts.google.com/u/${n}/search/${q}` },
+  { keys: ['play'], label: 'Play', host: 'play.google.com', url: q => `https://play.google.com/store/search?q=${q}` },
+];
+const TRANSLATE_LANGUAGES = ['af', 'ar', 'bg', 'bn', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fa', 'fi', 'fr', 'he', 'hi', 'hr', 'hu', 'id', 'it', 'ja', 'ka', 'ko', 'lt', 'lv', 'ms', 'nl', 'no', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sr', 'sv', 'th', 'tr', 'uk', 'ur', 'vi', 'zh-CN', 'zh-TW'];
+let languageNames = null;  // name or code, lower case → code
+
+function translateLanguage(word) {
+  if (!languageNames) {
+    const names = new Intl.DisplayNames(['en'], { type: 'language' });
+    const local = new Intl.DisplayNames([navigator.language], { type: 'language' });
+    languageNames = new Map(TRANSLATE_LANGUAGES.flatMap(code => [[code.toLowerCase(), code], [names.of(code).toLowerCase(), code], [local.of(code).toLowerCase(), code]]));
+    languageNames.set('chinese', 'zh-CN');
+  }
+  return languageNames.get(word.toLowerCase());
+}
+
+function siteSearchSuggestions(text) {
+  const [, key, query] = text.trim().match(/^(\S+)\s+(.+)$/) ?? [];
+  const site = key && SITE_SEARCHES.find(s => s.keys.includes(key.toLowerCase()));
+  if (!site) return [];
+  const label = site.label ?? SERVICE_DEFS[site.host].label;
+  const icon = site.host ? serviceIcon(site.host) : '<img src="icons/google.webp" alt="">';
+  if (site.translate) {
+    const m = query.match(/^(.+?)\s+(?:to|in|into)\s+(\S+(?:\s\S+)?)$/);
+    const target = m && translateLanguage(m[2]);
+    const words = target ? m[1] : query;
+    const to = target ?? translateLanguage(navigator.language.split('-')[0]) ?? 'en';
+    const url = `https://translate.google.com/?sl=auto&tl=${to}&text=${encodeURIComponent(words)}&op=translate`;
+    return [{ icon, title: words, detail: `Translate to ${new Intl.DisplayNames([navigator.language], { type: 'language' }).of(to)}`, kind: 'Search', url, fill: text }];
+  }
+  const q = encodeURIComponent(query);
+  if (!site.account) {
+    return [{ icon, title: query, detail: `Search ${label}`, kind: 'Search', url: site.url(q), fill: text }];
+  }
+  const first = searchAccount[site.host === 'mail.google.com' ? 'gmail' : 'drive'];
+  const list = shownAccounts().sort((a, b) => (b.index === first) - (a.index === first)).slice(0, 3);
+  return list.map(a => ({ icon, title: query, detail: `Search ${label} · ${displayName(a)}`, kind: 'Search', url: site.url(q, a.index), service: site.host, fill: text }));
+}
+
+// Accounts a suggestion can be for: the ones whose name or email has the given word, or all
+function accountsFor(word) {
+  const list = shownAccounts();
+  if (!word) return list;
+  return list.filter(a => `${displayName(a)} ${a.email ?? ''} ${a.name ?? ''}`.toLowerCase().includes(word));
+}
+
+// Gmail search words, like from:anna or has:attachment, search Gmail in each account
+const GMAIL_WORDS = /(^|\s)-?(from|to|cc|bcc|subject|label|has|is|in|filename|after|before|older_than|newer_than|larger|smaller|category|list|deliveredto|rfc822msgid):\S/i;
+
+function gmailSuggestions(text) {
+  if (!GMAIL_WORDS.test(text)) return [];
+  const first = searchAccount.gmail;
+  const list = shownAccounts().sort((a, b) => (b.index === first) - (a.index === first)).slice(0, 3);
+  return list.map(a => ({
+    icon: serviceIcon('mail.google.com'), title: text, detail: `Search Gmail · ${displayName(a)}`, kind: 'Gmail',
+    url: SEARCH_TARGETS.gmail.url(encodeURIComponent(text), a.index), service: 'mail.google.com', fill: text,
+  }));
+}
+
+// Open tabs whose title or address has every word typed; the dashboard's own tab isn't one
+async function tabSuggestions(text) {
+  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+  if (text.length < 2) return [];
+  const ownPages = `${location.origin}/`;
+  const tabs = (await chrome.tabs.query({})).filter(t => t.url && !t.url.startsWith(ownPages)
+    && words.every(w => `${t.title ?? ''} ${bareUrl(t.url)}`.toLowerCase().includes(w)));
+  tabs.sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0));
+  return tabs.slice(0, 3).map(t => ({
+    icon: serviceIcon(serviceForUrl(t.url)) || tabIcon(t), title: t.title || bareUrl(t.url), detail: bareUrl(t.url), kind: 'Switch to tab',
+    tabId: t.id, windowId: t.windowId, fill: bareUrl(t.url).replace(/\/$/, ''),
+  }));
+}
+
+// Google services by the start of their name, "cal" for Calendar; a second word picks the account
+function serviceSuggestions(text) {
+  const [name, ...rest] = text.toLowerCase().split(/\s+/);
+  if (name.length < 2) return [];
+  const hosts = Object.keys(SERVICE_DEFS).filter(host => SERVICE_DEFS[host].label.toLowerCase().split(/\s+/).some(w => w.startsWith(name)));
+  const list = accountsFor(rest.join(' '));
+  return hosts.slice(0, 2).flatMap(host => list.map(a => ({
+    icon: serviceIcon(host), title: SERVICE_DEFS[host].label, detail: displayName(a), kind: 'Service',
+    url: accountServiceUrl(host, a.index), service: host, fill: text,
+  }))).slice(0, 4);
+}
+
+// New files and more, in an account: "new doc", or just "sheet"; a word after it picks the account
+const CREATE_ITEMS = [
+  { words: ['document', 'doc', 'docs'], label: 'New document', host: 'docs.google.com', url: n => `https://docs.google.com/document/u/${n}/create` },
+  { words: ['spreadsheet', 'sheet', 'sheets'], label: 'New spreadsheet', host: 'sheets.google.com', url: n => `https://docs.google.com/spreadsheets/u/${n}/create` },
+  { words: ['presentation', 'slides', 'slide'], label: 'New presentation', host: 'slides.google.com', url: n => `https://docs.google.com/presentation/u/${n}/create` },
+  { words: ['form', 'forms'], label: 'New form', host: 'forms.google.com', url: n => `https://docs.google.com/forms/u/${n}/create` },
+  { words: ['meeting', 'meet', 'call'], label: 'New meeting', host: 'meet.google.com', url: n => `https://meet.google.com/new?authuser=${n}` },
+  { words: ['event', 'calendar'], label: 'New event', host: 'calendar.google.com', url: n => `https://calendar.google.com/calendar/u/${n}/r/eventedit` },
+  { words: ['email', 'mail', 'message', 'compose'], label: 'New email', host: 'mail.google.com', url: n => `https://mail.google.com/mail/u/${n}/#inbox?compose=new` },
+];
+
+function createSuggestions(text) {
+  const named = /^(new|create)\s+/i.test(text);
+  const [what = '', ...rest] = text.toLowerCase().replace(/^(new|create)\s+/, '').split(/\s+/);
+  if (!what) return [];
+  // After "new" the start of a word does; alone, it takes the whole word, so "cal" is still Calendar
+  const items = CREATE_ITEMS.filter(item => item.words.some(w => (named ? w.startsWith(what) : w === what)));
+  const list = accountsFor(rest.join(' '));
+  return items.slice(0, 2).flatMap(item => list.map(a => ({
+    icon: serviceIcon(item.host), title: item.label, detail: displayName(a), kind: 'Create',
+    url: item.url(a.index), service: item.host, fill: text,
+  }))).slice(0, 3);
+}
+
+// Google's suggestions, online, with Options → Search → Suggestions → Google suggestions and its
+// permission: searches, which search Google, and sites. The previous request is cancelled.
+const GOOGLE_SUGGEST = SUGGEST_SOURCES.find(s => s.id === 'google').origins;
+let googleRequest = null;
+
+async function googleSuggestions(text) {
+  if (!await chrome.permissions.contains({ origins: GOOGLE_SUGGEST })) return [];
+  googleRequest?.abort();
+  googleRequest = new AbortController();
+  try {
+    const res = await fetch(`https://suggestqueries.google.com/complete/search?client=chrome&hl=${encodeURIComponent(navigator.language)}&q=${encodeURIComponent(text)}`, { signal: googleRequest.signal });
+    const charset = res.headers.get('content-type')?.match(/charset=([\w-]+)/i)?.[1] ?? 'utf-8';
+    const [, found = [], descriptions = [], , extra = {}] = JSON.parse(new TextDecoder(charset).decode(await res.arrayBuffer()));
+    const types = extra['google:suggesttype'] ?? [];
+    return found.map((s, i) => types[i] === 'NAVIGATION'
+      ? { icon: bookmarkIcon(s), title: descriptions[i] || bareUrl(s), detail: bareUrl(s), kind: 'Google', url: s, fill: bareUrl(s).replace(/\/$/, '') }
+      : { icon: suggestIcon('google', 16), title: s, detail: '', kind: 'Google', url: SEARCH_TARGETS.google.url(encodeURIComponent(s)), fill: s })
+      .filter(s => s.fill.toLowerCase() !== text.toLowerCase())
+      .slice(0, 4);
+  } catch {
+    return [];
+  }
+}
+
+const SUGGESTERS = {
+  calc: calcSuggestions, convert: convertSuggestions, time: timeSuggestions, currency: currencySuggestions,
+  // A service by name ("drive work" opens Drive in that account), Gmail search words, a search in a service
+  services: (text) => [...serviceSuggestions(text), ...gmailSuggestions(text), ...siteSearchSuggestions(text)],
+  tabs: tabSuggestions, create: createSuggestions, chrome: chromeSuggestions, google: googleSuggestions,
+};
+const SITE_SOURCES = ['history', 'bookmarks', 'topSites'];
+
+// Every suggestion for what's typed, in the order of Options → Search → Suggestions; a site found
+// in several of history, bookmarks and most visited goes with the first of them there
+async function lookupSuggestions(text) {
+  const on = searchSuggest.filter(s => s.on).map(s => s.id);
+  const [sites, ...others] = await Promise.all([
+    lookupSites(text, new Set(on.filter(id => SITE_SOURCES.includes(id)))),
+    ...on.filter(id => SUGGESTERS[id]).map(id => Promise.resolve(SUGGESTERS[id](text)).catch(() => [])),
+  ]);
+  const groups = Object.fromEntries(on.filter(id => SUGGESTERS[id]).map((id, i) => [id, others[i]]));
+  const siteRank = (s) => Math.min(...[...s.sources].map(source => on.indexOf(source)).filter(i => i >= 0));
+  const ranked = [
+    ...Object.entries(groups).flatMap(([id, list]) => list.map(s => ({ ...s, rank: on.indexOf(id) }))),
+    ...sites.map(s => ({ ...siteSuggestion(s), rank: siteRank(s) })),
+  ];
+  return ranked.sort((a, b) => a.rank - b.rank);
+}
+
+function renderSuggestions() {
+  suggestEl.hidden = !suggestions.length;
+  suggestEl.innerHTML = suggestions.map((s, i) => `
+    <div class="suggestion" role="option" data-index="${i}" aria-selected="${i === suggestIndex}">
+      ${s.icon}
+      <span class="title">${esc(s.title)}</span>
+      <span class="address">${esc(s.detail)}</span>
+      <span class="kind">${esc(s.kind)}</span>
+    </div>`).join('');
+}
+
+function closeSuggestions() {
+  suggestions = [];
+  suggestIndex = -1;
+  completion = null;
+  renderSuggestions();
+}
+
+// An open site, or a search, clears the field
+function clearSearch() {
+  qInput.value = '';
+  typedText = '';
+  closeSuggestions();
+}
+
+// An answer goes in the field, selected, and on the clipboard; a tab is switched to; the rest open
+function runSuggestion(s, newTab) {
+  if (s.copy !== undefined) {
+    navigator.clipboard.writeText(s.copy).catch(() => {});
+    closeSuggestions();
+    qInput.value = typedText = s.copy;
+    qInput.select();
+  } else if (s.chromeUrl) {
+    // window.open can't open Chrome's pages; Options → Dashboard → Open links still applies
+    clearSearch();
+    inPlaceTabId(newTab).then(tabId => (tabId ? chrome.tabs.update(tabId, { url: s.chromeUrl }) : chrome.tabs.create({ url: s.chromeUrl })));
+    closePopup();
+  } else if (s.tabId !== undefined) {
+    chrome.tabs.update(s.tabId, { active: true });
+    chrome.windows.update(s.windowId, { focused: true });
+    clearSearch();
+    closePopup();
+  } else {
+    openLink(s.url, s.service ?? serviceForUrl(s.url), newTab);
+    clearSearch();
+  }
+}
+
+qInput.addEventListener('input', async (e) => {
+  typedText = qInput.value;
+  completion = null;
+  suggestIndex = -1;
+  const text = typedText.trim();
+  if (!searchSuggest.some(s => s.on) || !text) { closeSuggestions(); return; }
+  const run = ++suggestRun;
+  const found = await lookupSuggestions(text);
+  if (run !== suggestRun || qInput.value !== typedText) return;
+  suggestions = found.slice(0, SUGGEST_LIMIT);
+  // Completed only while typing on at the end, not after deleting. Until a / is typed it completes
+  // the site's address only, and its home page comes first, at the top of the list.
+  let best = found.find(s => s.prefix);
+  if (best && !typedText.includes('/')) {
+    const home = `${new URL(best.url).origin}/`;
+    best = found.find(s => s.url === home) ?? siteSuggestion({ url: home, title: new URL(home).hostname.replace(/^www\./, ''), prefix: true, sources: best.sources });
+  }
+  if (best) suggestions = [best, ...found.filter(s => s !== best)].slice(0, SUGGEST_LIMIT);
+  if (best && e.inputType?.startsWith('insert') && qInput.selectionStart === qInput.value.length && !/\s/.test(typedText)) {
+    const rest = bareUrl(best.url).slice(typedText.length).replace(/\/$/, '');
+    if (rest) {
+      completion = best;
+      qInput.value = typedText + rest;
+      qInput.setSelectionRange(typedText.length, qInput.value.length);
+    }
+  }
+  renderSuggestions();
+});
+
+qInput.addEventListener('keydown', (e) => {
+  if (e.isComposing) return;
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && suggestions.length) {
+    e.preventDefault();
+    const step = e.key === 'ArrowDown' ? 1 : -1;
+    suggestIndex = (suggestIndex + 1 + step + suggestions.length + 1) % (suggestions.length + 1) - 1;
+    completion = null;
+    qInput.value = suggestIndex === -1 ? typedText : suggestions[suggestIndex].fill;
+    renderSuggestions();
+  } else if (e.key === 'Escape' && !suggestEl.hidden) {
+    e.preventDefault();
+    e.stopPropagation();
+    qInput.value = typedText;
+    closeSuggestions();
+  } else if (e.key === 'Enter') {
+    const picked = suggestIndex >= 0 ? suggestions[suggestIndex] : completion && qInput.selectionStart !== qInput.selectionEnd ? completion : null;
+    if (!picked) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    runSuggestion(picked, e.ctrlKey || e.metaKey);
+  }
+});
+
+// A click keeps the focus in the field; leaving the field closes the list and drops the completion,
+// so a search button searches for what's typed
+suggestEl.addEventListener('mousedown', e => e.preventDefault());
+suggestEl.addEventListener('click', (e) => {
+  const row = e.target.closest('.suggestion');
+  if (row) runSuggestion(suggestions[row.dataset.index], e.ctrlKey || e.metaKey);
+});
+qInput.addEventListener('blur', () => {
+  if (completion) qInput.value = typedText;
+  closeSuggestions();
+});
+
+// Text that reads as a web address: with http(s)://, or one word with a dot and a top-level domain,
+// or localhost, optionally with a port and path. Without a scheme it's https, but http for localhost.
+function typedAddress(text) {
+  if (/\s/.test(text)) return null;
+  if (!/^https?:\/\//i.test(text) && !/^(localhost|[\w-]+(\.[\w-]+)*\.[a-z]{2,})(:\d+)?([/?#]\S*)?$/i.test(text)) return null;
+  try {
+    return new URL(/^https?:\/\//i.test(text) ? text : `${/^localhost\b/i.test(text) ? 'http' : 'https'}://${text}`).href;
+  } catch {
+    return null;
+  }
+}
+
+// Enter on an address, like example.com, opens the site instead of searching for it; a search
+// button still searches for it. Runs after the suggestions, which handle Enter on one picked.
+qInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.isComposing) return;
+  const url = typedAddress(qInput.value.trim());
+  if (!url) return;
   e.preventDefault();
-  const q = document.getElementById('q').value.trim();
-  // Enter with no search buttons searches Google
-  const id = e.submitter?.value ?? 'google';
+  openLink(url, serviceForUrl(url), e.ctrlKey || e.metaKey);
+  clearSearch();
+});
+
+function runSearch(id) {
+  const q = qInput.value.trim();
   const target = SEARCH_TARGETS[id];
   if (!q || !target) return;
   const url = target.url(encodeURIComponent(q), searchAccount[id] ?? 0);
   openLink(url, target.service);
+  clearSearch();
+}
+
+// Enter with no search buttons searches Google; with the one control (no submit button), the search it shows
+document.getElementById('search').addEventListener('submit', (e) => {
+  e.preventDefault();
+  runSearch(e.submitter?.value ?? (searchButtonsEl.querySelector('.split.single') ? searchTarget : 'google'));
 });
 
 chrome.tabs.onCreated.addListener(scheduleRenderTabs);
@@ -1750,6 +2663,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.stats) renderStats();
   if (area === 'local' && (changes.recentPinned || changes.recentRemoved)) renderRecent();
   if (area === 'local' && changes.visitedEdits) renderVisited();
+  // The one search button's choice, made in the popup or another dashboard
+  if (area === 'local' && changes.searchChoice && searchRemember) {
+    applySearchChoice(changes.searchChoice.newValue);
+    renderSearch();
+  }
   if (area !== 'sync') return;
   if (changes.newTabTitle && isNewTab) document.title = changes.newTabTitle.newValue || NEW_TAB_TITLE;
   if (changes.dashboardIcon && !embedded) setPageIcon(document.querySelector('.page-header img'), 64, changes.dashboardIcon.newValue);
@@ -1775,6 +2693,14 @@ chrome.storage.onChanged.addListener((changes, area) => {
     searchButtons = { ...searchButtons, ...changes.searchButtons.newValue };
     renderSearch();
     applyLayout();
+  }
+  if (changes.searchTypeToFocus) searchTypeToFocus = changes.searchTypeToFocus.newValue;
+  if (changes.searchSuggest) searchSuggest = suggestSources(changes.searchSuggest.newValue);
+  if (changes.searchLayout || changes.searchLabels || changes.searchRemember) {
+    searchLayout = changes.searchLayout?.newValue ?? searchLayout;
+    searchLabels = changes.searchLabels?.newValue ?? searchLabels;
+    searchRemember = changes.searchRemember?.newValue ?? searchRemember;
+    renderSearch();
   }
   const panelChanges = Object.keys(PANEL_DEFAULTS).filter(key => changes[key]);
   if (panelChanges.length) {

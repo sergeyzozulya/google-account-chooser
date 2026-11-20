@@ -584,6 +584,8 @@
     .text-field:focus { border-color: var(--accent); }
 
     .inline-switches { display: flex; gap: 20px; flex-shrink: 0; margin-left: 32px; }
+    .inline-selects { display: flex; gap: 8px; flex-shrink: 0; margin-left: 32px; }
+    .card .inline-selects .select-field { min-width: 0; }
     .inline-switch { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 
     /* Dashboard account and section rows (drag to reorder, like the services table) */
@@ -646,6 +648,12 @@
     .account-name-input { font-size: 13px; font-weight: 500; width: 220px; }
 
     .accounts-empty { font-size: 12px; color: var(--text-low); padding: 12px 20px; }
+    .card-header + .hint { margin: 16px 0; }
+    #visited-edits .table-row { padding: 8px 20px; }
+    #visited-edits .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #visited-edits .url { font-size: 12px; font-weight: 400; color: var(--text-low); }
+    .row-btn { font-size: 13px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 0; font-family: inherit; }
+    .row-btn:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -898,6 +906,56 @@
           <label class="inline-switch">Drive <span class="switch"><input type="checkbox" data-search="drive"><span class="slider"></span></span></label>
         </div>
       </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Layout</div>
+          <div class="hint">One button takes less room: it runs the search it shows, also with Enter, and its menu lists each search with its accounts.</div>
+        </div>
+        <select class="select-field" id="search-layout">
+          <option value="separate">Separate buttons</option>
+          <option value="menu">One button with a menu</option>
+        </select>
+      </div>
+      <div class="card-row" id="search-remember-row" hidden>
+        <div>
+          <div class="label">Remember choice</div>
+          <div class="hint">Keep the search and account chosen in the button's menu, on this device. Turned off, the button starts with the first search each time.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="search-remember">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Button labels</div>
+          <div class="hint">Icons take less room; the search and account show when you point at a button.</div>
+        </div>
+        <select class="select-field" id="search-labels">
+          <option value="text">Text</option>
+          <option value="icon">Icons</option>
+          <option value="both">Icons with text</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Type to search</div>
+          <div class="hint">Typing anywhere on the dashboard or in the popup goes into the search field.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="search-type-to-focus">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Suggestions</div>
+          <div class="hint">As you type, suggest answers, tabs, services and sites, and complete addresses, like Chrome's address bar. Drag to set their order in the list. A source that needs Chrome's permission asks for it when you turn it on.</div>
+        </div>
+      </div>
+      <div class="settings-table">
+        <div id="suggest-sources" class="sortable"></div>
+      </div>
     </div>
 
     </div>
@@ -949,16 +1007,6 @@
         </div>
         <label class="switch">
           <input type="checkbox" data-gmail="mailAvatars">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="card-row">
-        <div>
-          <div class="label">List header</div>
-          <div class="hint">Show “Inbox” and Open Gmail above the email list in each account card.</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" data-gmail="mailListHeader">
           <span class="slider"></span>
         </label>
       </div>
@@ -1073,18 +1121,6 @@
       <div class="card-header"><h2>Recent files</h2></div>
       <div class="card-row">
         <div>
-          <div class="label">Files listed</div>
-          <div class="hint">How many files each group lists (each account or type), or the whole list when not grouped. Pinned files count towards this, and always show, whatever the settings here.</div>
-        </div>
-        <select class="select-field" data-panel="recentPerAccount">
-          <option value="3">3</option>
-          <option value="5">5</option>
-          <option value="10">10</option>
-          <option value="20">20</option>
-        </select>
-      </div>
-      <div class="card-row">
-        <div>
           <div class="label">File types</div>
           <div class="hint">Which kinds of files to list.</div>
         </div>
@@ -1116,6 +1152,18 @@
           <option value="account">Group by account</option>
           <option value="type">Group by type</option>
           <option value="none">No group</option>
+        </select>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Files listed</div>
+          <div class="hint">How many files each group lists (each account or type), or the whole list when not grouped. Pinned files count towards this, and always show, whatever the settings here.</div>
+        </div>
+        <select class="select-field" data-panel="recentPerAccount">
+          <option value="3">3</option>
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
         </select>
       </div>
       <div class="card-row">
@@ -1161,14 +1209,67 @@
       <div class="card-header"><h2>Most visited</h2></div>
       <div class="card-row">
         <div>
-          <div class="label">Icons</div>
-          <div class="hint">Small icons have the name on the right, in a row or a column. Large icons have it underneath.</div>
+          <div class="label">Source</div>
+          <div class="hint">Where the sites come from. Sites you add in Edit show with any source.</div>
         </div>
-        <select class="select-field" data-panel="visitedIcons">
-          <option value="large">Large</option>
-          <option value="small-row">Small (row)</option>
-          <option value="small-col">Small (col)</option>
+        <select class="select-field" data-panel="visitedSource">
+          <option value="chrome">Chrome's New Tab list</option>
+          <option value="history">Browser history</option>
+          <option value="mine">My sites only</option>
         </select>
+      </div>
+      <div class="card-row" data-visited-source="chrome history">
+        <div>
+          <div class="label">Sites listed</div>
+          <div class="hint">At most this many, the most visited first. Pinned sites count towards this, and always show.</div>
+        </div>
+        <div class="inline-selects">
+          <select class="select-field" data-panel="visitedCount" aria-label="Sites listed">
+            <option value="5">5 sites</option>
+            <option value="10">10 sites</option>
+            <option value="15">15 sites</option>
+            <option value="20">20 sites</option>
+            <option value="50">50 sites</option>
+          </select>
+          <select class="select-field" data-panel="visitedDays" data-visited-source="history" aria-label="Period">
+            <option value="7">in the last 7 days</option>
+            <option value="30">in the last 30 days</option>
+            <option value="90">in the last 90 days</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="label">Icons</div>
+          <div class="hint">Small icons have the name on the right, large icons have it underneath.</div>
+        </div>
+        <div class="inline-selects">
+          <select class="select-field" data-panel="visitedIcons" aria-label="Icons">
+            <option value="large">Large</option>
+            <option value="small">Small</option>
+          </select>
+          <select class="select-field" data-panel="visitedLargePerRow" data-visited-icons="large" aria-label="Icons per row">
+            <option value="auto">Auto per row</option>
+            <option value="3">3 per row</option>
+            <option value="4">4 per row</option>
+            <option value="5">5 per row</option>
+            <option value="6">6 per row</option>
+            <option value="8">8 per row</option>
+            <option value="10">10 per row</option>
+            <option value="12">12 per row</option>
+            <option value="14">14 per row</option>
+            <option value="16">16 per row</option>
+          </select>
+          <select class="select-field" data-panel="visitedColumns" data-visited-icons="small" aria-label="Columns">
+            <option value="auto">Auto columns</option>
+            <option value="1">1 column</option>
+            <option value="2">2 columns</option>
+            <option value="3">3 columns</option>
+            <option value="4">4 columns</option>
+            <option value="5">5 columns</option>
+            <option value="6">6 columns</option>
+          </select>
+        </div>
       </div>
       <div class="card-row">
         <div>
@@ -1180,18 +1281,23 @@
           <span class="slider"></span>
         </label>
       </div>
-      <div class="card-row">
+      <div class="card-row" data-visited-source="history">
         <div>
-          <div class="label">Sites listed</div>
-          <div class="hint">At most this many. Pinned sites count towards this, and always show. Fewer show when Chrome's list is shorter.</div>
+          <div class="label">Visits</div>
+          <div class="hint">Show how many times you visited each site, as your browser history counts them.</div>
         </div>
-        <select class="select-field" data-panel="visitedCount">
-          <option value="5">5</option>
-          <option value="10">10</option>
-          <option value="15">15</option>
-          <option value="20">20</option>
-        </select>
+        <label class="switch">
+          <input type="checkbox" data-panel="visitedVisits">
+          <span class="slider"></span>
+        </label>
       </div>
+    </div>
+
+    <!-- Most visited's Edit mode changes, kept on this device -->
+    <div class="card">
+      <div class="card-header"><h2>Your changes</h2></div>
+      <div class="hint">Made with Edit in Most visited, and kept on this device.</div>
+      <div class="settings-table" id="visited-edits"></div>
     </div>
 
     </div>

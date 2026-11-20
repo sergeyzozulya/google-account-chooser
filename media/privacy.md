@@ -38,23 +38,31 @@ A single static rule (rules.json) removes the extension's Origin header from one
 
 ### history
 
-Optional, requested only when the user turns on the dashboard's Recent files section. Reads recently visited Google Docs/Sheets/Slides/Forms addresses to list them on the dashboard, grouped by account. Read locally, never transmitted.
+Optional, requested only when the user turns on the dashboard's Recent files section, the Most visited section with its source set to browser history, or History in Options → Search → Suggestions. Reads recently visited Google Docs/Sheets/Slides/Forms addresses to list them on the dashboard, grouped by account, and, for Most visited, counts visits per site to list the most visited ones. Once granted, it also suggests visited pages as the user types in the dashboard's search field. Read locally, never transmitted.
 
 ### bookmarks
 
-Optional, requested only when the user turns on the dashboard's Bookmarks section. Reads the bookmarks bar and Other bookmarks to display a bookmarks bar on the dashboard (which can replace the New Tab page). Read-only use; nothing is transmitted.
+Optional, requested only when the user turns on the dashboard's Bookmarks section, or Bookmarks in Options → Search → Suggestions. Reads the bookmarks bar and Other bookmarks to display a bookmarks bar on the dashboard (which can replace the New Tab page), and, once granted, to suggest bookmarks as the user types in the dashboard's search field. Read-only use; nothing is transmitted.
 
 ### topSites
 
-Optional, requested only when the user turns on the dashboard's Most visited section. Reads the list of most visited sites that Chrome keeps for its New Tab page, to display it on the dashboard. Read-only use; nothing is transmitted.
+Optional, requested only when the user turns on the dashboard's Most visited section with its source set to Chrome's New Tab list, or Most visited in Options → Search → Suggestions. Reads the list of most visited sites that Chrome keeps for its New Tab page, to display it on the dashboard and, once granted, to suggest those sites as the user types in the dashboard's search field. Read-only use; nothing is transmitted.
 
 ### favicon
 
-Optional, requested together with bookmarks or topSites to show each site's icon from Chrome's local favicon cache.
+Optional, requested together with bookmarks or topSites, or with Most visited's other sources, to show each site's icon from Chrome's local favicon cache.
 
 ### Host permission
 
 Requested only for accounts.google.com and mail.google.com, to (1) read each signed-in account's unread Gmail messages and count from mail.google.com/mail/u/N/feed/atom, (2) show an email thread the user clicks from mail.google.com/mail/u/N/?view=pt, and (3) read the list of signed-in accounts (name, email, photo) from accounts.google.com/ListAccounts. Routing links through Account Chooser needs no host access; it uses webNavigation and tabs. These requests use the user's existing Google session, run in the browser, and their results are only shown locally.
+
+### Optional host permission (suggestqueries.google.com)
+
+Requested only when the user turns on Google suggestions in Options → Search → Suggestions, which is off by default. While it's on, the text typed in the dashboard's search field is sent to Google's suggestion service (suggestqueries.google.com), as Chrome's address bar does, to show the searches and sites Google suggests for it. Nothing else is sent, and nothing is sent to the developer. Turning it off stops it; the permission can be removed in Chrome's extension settings.
+
+### Optional host permission (open.er-api.com)
+
+Requested only when the user turns on Currency conversion in Options → Search → Suggestions, which is off by default. Downloads ExchangeRate-API's public daily exchange rates (open.er-api.com/v6/latest/EUR), at most every 6 hours, and keeps them on the device to convert amounts typed in the search field. Nothing the user types or any other data is sent; the request carries no user data.
 
 ### Are you using remote code?
 
@@ -64,7 +72,7 @@ No, I am not using remote code.
 
 ### What user data do you plan to collect from users now or in the future?
 
-None checked (all data is read and shown locally in the browser; nothing is collected or transmitted).
+None checked (all data is read and shown locally in the browser; nothing is collected by the developer. Only with the optional Google suggestions turned on is the text typed in the search field sent to Google's suggestion service).
 
 ### I certify that the following disclosures are true
 

@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.5.0] — 2026-11-20
+
+### Added
+- **Options → Most visited**: Source (Chrome's New Tab list, the default; Browser history; or My sites only), Sites listed now also 50 and, with Browser history, in the last 7, 30 (the default) or 90 days, Icons per row for Large (Auto, 3, 4, 5, 6, 8, 10, 12, 14 or 16) and columns for Small (1 to 6, default 1, or Auto, side by side as many as fit), and Visits (with Browser history, each site's number of visits). Browser history requests the optional `history` permission
+- **Edit** in Most visited: click a name to rename a site; an added site goes to the top; removing a site removes every page of it
+- **Options → Most visited → Your changes**: every pinned, added, renamed and removed site, each with Unpin, Delete, Undo or Restore
+- **Layout** (Options → Search): separate search buttons (the default), or one button whose menu lists Google and each account for Gmail and Drive; it runs the search last chosen, also with Enter, and its menu shows each service's icon; in the popup it moves under the field, full width, when both don't fit. **Remember choice** keeps that choice on this device
+- **Button labels** (Options → Search): text, icons — the service's icon and, for Gmail and Drive, the account's avatar, with the search and account named on hover — or icons with text. With one button and icons, it's a single control joined to the search field: it opens the menu, picking a search there runs it for what's typed, and Enter runs the search it shows. In the popup, icon buttons stay beside the field while they fit
+- **Type to search** (Options → Search): typing anywhere on the dashboard or in the popup goes into the search field
+- **Suggestions** (Options → Search): as you type, like Chrome's address bar, with the address completed in the field; ↑ and ↓ pick one, Enter or a click runs it. Sources, each on or off and dragged into the order they're listed in: Calculator and dates (12*(3+4)/2, 15% of 80, days until dec 25, today + 90 days, dec 25 - today, week number; Enter puts the result in the field and copies it), Unit conversion (5 km in mi, 72 f in c), Time and time zones (time tokyo, 3pm london in tokyo, 9:30 in new york), Currency conversion (100 usd in eur, ₴500 to $; daily rates for about 160 currencies by ExchangeRate-API, fetched online at most every 6 hours, off by default), Google services (cal or drive work opens a service in an account; maps cafe, yt lofi, translate hello to spanish, photos beach or keep groceries searches one; from:anna invoice searches Gmail), Open tabs (switch to one), Create new (new doc, sheet, slides, form, meeting, event or email, in an account), Chrome pages (settings, downloads, extensions, passwords, clear history), History, Bookmarks, Most visited, and Google suggestions, online and off by default: what you type is then sent to Google. A source that needs a permission asks for it when turned on
+- Enter on an address in the search field, like example.com, opens the site instead of searching for it
+
+### Changed
+- Most visited icons are Large or Small: Small (row) and Small (col) became Small, in one column
+- The search field clears once a search or site opens
+- The popup no longer puts the focus in the search field when it opens; the arrow keys still start at its first control
+- The search field and buttons have less rounded corners, like the rest of the dashboard
+- Gmail and Drive search buttons read "Gmail: account", the service first
+- Search placeholder: "Ask Google or type a URL"
+- Options → Recent files: Files listed comes after Grouping
+
+### Removed
+- Options → Gmail → List header: lists in account cards always show Inbox and Open Gmail above them
+
+---
+
 ## [2.4.0] — 2026-11-02
 
 ### Added

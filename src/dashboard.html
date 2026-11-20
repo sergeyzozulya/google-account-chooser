@@ -132,6 +132,10 @@
     .embedded #sections > * { grid-column: span 12 !important; }
     .embedded #search { flex-wrap: wrap; }
     .embedded .search-field { flex-basis: 100%; }
+    /* One search button: beside the field while both fit, otherwise under it, full width */
+    .embedded #search.one-button .search-field { flex: 1000 1 180px; }
+    .embedded #search.one-button .split { flex: 1 1 auto; }
+    .embedded #search.one-button .split-main { flex: 1; max-width: none; }
     .embedded #search > span > button,
     .embedded #search .split-main { padding-top: 7px; padding-bottom: 7px; }
 
@@ -213,7 +217,7 @@
       min-width: 0;
     }
 
-    .search-field svg {
+    .search-field > svg {
       position: absolute;
       left: 16px;
       top: 50%;
@@ -227,7 +231,7 @@
       min-width: 0;
       padding: 10px 16px 10px 44px;
       border: 1px solid var(--border);
-      border-radius: 24px;
+      border-radius: 8px;
       background: var(--bg);
       outline: none;
     }
@@ -241,7 +245,7 @@
       max-width: 240px;
       padding: 0 14px 0 18px;
       border-right: none;
-      border-radius: 24px 0 0 24px;
+      border-radius: 8px 0 0 8px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -250,7 +254,7 @@
     #search .split-toggle {
       width: 36px;
       padding: 0;
-      border-radius: 0 24px 24px 0;
+      border-radius: 0 8px 8px 0;
       background: var(--bg) var(--select-arrow) no-repeat 12px center;
     }
 
@@ -258,6 +262,29 @@
     #search .split-toggle[aria-expanded="true"] { border-color: var(--accent); }
 
     .picker-option span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Options → Search → Suggestions: under the field, like Chrome's address bar */
+    .suggestions {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      z-index: 20;
+      padding: 4px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, .18);
+    }
+    .suggestion { display: flex; align-items: center; gap: 10px; padding: 7px 16px; cursor: pointer; font-size: 13px; }
+    .suggestion:hover, .suggestion[aria-selected="true"] { background: var(--hover); }
+    .suggestion img, .suggestion svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .suggestion svg { color: var(--text-muted); }
+    .suggestion .title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .suggestion .address { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 12px; }
+    .suggestion .kind { flex-shrink: 0; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 11px; }
+    .picker-group { display: flex; align-items: center; gap: 6px; padding: 8px 16px 4px; font-size: 11px; font-weight: 600; color: var(--text-muted); }
+    .picker-group:not(:first-child) { margin-top: 4px; border-top: 1px solid var(--border); }
 
     .picker-menu {
       position: absolute;
@@ -295,13 +322,37 @@
     #search button {
       padding: 0 18px;
       border: 1px solid var(--border);
-      border-radius: 24px;
+      border-radius: 8px;
       background: var(--bg);
       cursor: pointer;
       font-weight: 400;
     }
 
     #search button:hover { background: var(--hover); }
+
+    /* Options → Search → Button labels → Icons */
+    #search.icon-labels > span > button,
+    #search.icon-labels .split-main { display: flex; align-items: center; gap: 8px; }
+    #search.icon-labels .split-main span { overflow: hidden; text-overflow: ellipsis; }
+    #search.icon-only > span > button { padding: 0 12px; }
+    #search.icon-only .split-main { gap: 6px; padding: 0 8px 0 12px; }
+    .embedded #search.icon-only .search-field { flex: 1000 1 180px; }
+    /* With one button and icons, one control that opens the menu… */
+    #search .split.single .split-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: auto;
+      padding: 0 32px 0 12px;
+      border-left: none;
+      border-radius: 0 8px 8px 0;
+      background-position: right 10px center;
+    }
+    #search .split.single .split-toggle:hover { background-position: right 10px center; }
+    /* …joined to the field */
+    #search:has(.split.single) { column-gap: 0; }
+    #search:has(.split.single) #q { border-radius: 8px 0 0 8px; }
+    #search:has(#q:focus) .split.single .split-toggle { border-color: var(--accent); }
 
     /* Default search (Enter) */
     #search .search-default { font-weight: 600; }
@@ -450,7 +501,6 @@
 
     /* Listed right away in the account card (Options → Gmail → Expand unread emails) */
     .inbox.in-card { max-height: 360px; overflow-y: auto; border-top: 1px solid var(--border-sub); }
-    .no-list-header .in-card .inbox-head { display: none; }
 
     /* The list header stays put while the list scrolls */
     .inbox-view > .inbox-head { position: sticky; top: 0; z-index: 1; background: var(--bg); }
@@ -672,13 +722,21 @@
     #visited.small-row { display: flex; flex-wrap: wrap; }
     #visited .empty { grid-column: 1 / -1; }
     #visited:is(.large, .small-row) .row { min-width: 0; border-radius: 8px; }
-    #visited.large .row { flex-direction: column; justify-content: center; gap: 8px; padding: 12px 8px; }
+    #visited.large .row { flex-direction: column; justify-content: flex-start; gap: 8px; padding: 12px 8px; }
     #visited.small-row .row { width: auto; max-width: 220px; padding: 6px 10px; }
     #visited:is(.large, .small-row).icons-only .row { padding: 8px; }
-    #visited.large .row img { width: 40px; height: 40px; }
+    #visited.large .row img { width: min(40px, 100%); height: auto; aspect-ratio: 1; }
+    /* Many icons per row: narrow tiles keep only a little padding, and the icons shrink to fit */
+    #visited.large.fixed-columns .row { padding-inline: 2px; }
     #visited.large .row .title { flex: none; width: 100%; text-align: center; }
     #visited.small-row .row .title { flex: 0 1 auto; }
-    #visited.icons-only .row .title { display: none; }
+    #visited.icons-only:not(.editing) .row .title { display: none; }
+    #visited .row .meta { flex-shrink: 0; }
+    #visited.small-row .row .meta { margin-left: auto; }
+    #visited.editing .row .meta + .pin { margin-left: 0; }
+    #visited.large .row .meta { margin-top: -6px; }
+    #visited:is(.large, .small-row).fixed-columns { display: grid; grid-template-columns: repeat(var(--visited-columns), minmax(0, 1fr)); }
+    #visited.small-row.fixed-columns :is(.row, .visited-rename) { width: auto; max-width: none; }
 
     /* Edit mode (Recent files, Most visited): rows drag, and show pin and remove buttons */
     .panel:has(.editing) .section-head .text-btn { opacity: 1; }
@@ -691,6 +749,14 @@
     #visited.editing.large .row .pin, #visited.editing.large .row .close { position: absolute; top: 6px; margin: 0; }
     #visited.editing.large .row .pin { left: 6px; }
     #visited.editing.large .row .close { right: 6px; }
+    #visited.editing [data-visited-rename] { cursor: text; }
+    #visited.editing [data-visited-rename]:hover { text-decoration: underline dotted; }
+    .visited-rename { cursor: default; }
+    .visited-rename input { flex: 1; min-width: 0; padding: 2px 6px; border: 1px solid var(--accent); border-radius: 4px; background: var(--bg); color: inherit; font: inherit; font-size: 13px; outline: none; }
+    #visited.large .visited-rename { flex-direction: column; justify-content: center; gap: 8px; padding: 28px 8px 12px; }
+    #visited.large .visited-rename img { width: 40px; height: 40px; }
+    #visited.large .visited-rename input { flex: none; width: 100%; text-align: center; }
+    #visited.small-row .visited-rename { width: 220px; padding: 6px 10px; }
 
     /* Where a dragged row lands: a straight line between rows, or between icons along a line */
     .row.drop-before::before, .row.drop-after::before {
@@ -861,7 +927,7 @@
         <div class="section-head"><h2>Search</h2></div>
         <form id="search">
           <label class="search-field">
-            <input id="q" type="search" placeholder="Search" autocomplete="off">
+            <input id="q" type="search" placeholder="Ask Google or type a URL" autocomplete="off">
           </label>
           <span id="search-buttons" style="display: contents"></span>
         </form>
@@ -901,10 +967,10 @@
         <div class="section-head">
           <h2>Most visited</h2>
           <span class="hint"></span>
-          <button class="text-btn" id="visited-reset" title="Bring back removed sites, delete added ones, and undo pins and order" hidden>Reset</button>
-          <button class="text-btn" id="visited-edit" data-edit="visited" title="Add, remove, pin and re-order sites" hidden>Edit</button>
+          <button class="text-btn" id="visited-reset" title="Bring back removed sites, delete added ones, and undo pins, names and order" hidden>Reset</button>
+          <button class="text-btn" id="visited-edit" data-edit="visited" title="Add, remove, pin, rename and re-order sites" hidden>Edit</button>
         </div>
-        <button class="edit-corner" id="visited-edit-corner" data-edit="visited" title="Add, remove, pin and re-order sites" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button class="edit-corner" id="visited-edit-corner" data-edit="visited" title="Add, remove, pin, rename and re-order sites" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         <div class="panel-body" id="visited"></div>
       </section>
 
