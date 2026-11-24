@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, VISITED_EDITS, visitedEditsOf, accountFromUrl, accountServiceUrl, accountKey, orderAccounts, dashboardSections, sectionIcon, formatDate, setPageIcon, renderPageIcon */
+/* global SERVICE_DEFS, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, VISITED_EDITS, visitedEditsOf, visitedCountOf, accountFromUrl, accountServiceUrl, accountKey, orderAccounts, dashboardSections, sectionIcon, formatDate, setPageIcon, renderPageIcon */
 
 const DOCS_KINDS = {
   document:     'docs.google.com',
@@ -1195,6 +1195,34 @@ async function historySites() {
   return [...sites.values()].sort((a, b) => b.visits - a.visits);
 }
 
+// A host's registrable domain: its last two labels, or three under a ccTLD's com., co., org. and the
+// like (bbc.co.uk). IP addresses and single-label hosts stay as they are.
+const COUNTRY_SECOND_LEVELS = new Set(['ac', 'co', 'com', 'edu', 'gob', 'gov', 'mil', 'ne', 'net', 'or', 'org']);
+function domainOf(host) {
+  if (/^[\d.]+$|:/.test(host)) return host;
+  const labels = host.split('.');
+  const country = labels.length > 2 && labels.at(-1).length === 2 && COUNTRY_SECOND_LEVELS.has(labels.at(-2));
+  return labels.slice(country ? -3 : -2).join('.');
+}
+
+// Options → Most visited → Group by domain: one site per domain, in the place of its first site, its
+// visits added up; the domain's own address unless its first site is the domain itself
+function sitesByDomain(sites) {
+  const domains = new Map();
+  for (const s of sites) {
+    const domain = domainOf(hostOf(s.url));
+    const site = domains.get(domain);
+    if (site) site.visits += s.visits ?? 0;
+    else domains.set(domain, {
+      url: hostOf(s.url) === domain ? s.url : `https://${domain}/`,
+      title: domain,
+      iconUrl: s.iconUrl ?? s.url,
+      visits: s.visits ?? 0,
+    });
+  }
+  return [...domains.values()].sort((a, b) => b.visits - a.visits);
+}
+
 // Options → Most visited → Icons (with large icons per row, or small ones' columns) and Text. Small
 // icons in one column are a list like the other sections'; in more, or Auto, they're laid out in a row.
 function applyVisitedLook() {
@@ -1229,7 +1257,8 @@ async function renderVisited() {
 
   const { removed, pinned, order, added, names } = await visitedEdits();
   // Removed sites aren't listed from the source; sites added by hand always are
-  const source = (await visitedSource().sites()).filter(s => !removed.includes(hostOf(s.url)));
+  const listed = await visitedSource().sites();
+  const source = (panelSettings.visitedByDomain ? sitesByDomain(listed) : listed).filter(s => !removed.includes(hostOf(s.url)));
   visitedSourceUrls = new Set(source.map(s => s.url));
   const sites = [...added.filter(a => !source.some(s => s.url === a.url)), ...source];
   const rank = (s) => {
@@ -1241,7 +1270,7 @@ async function renderVisited() {
   const rest = inOrder(sites.filter(s => !pinned.some(p => p.url === s.url)));
   // Pinned sites always show; the others fill up to Options → Most visited → Sites listed, which
   // doesn't limit the sites added by hand alone
-  const room = panelSettings.visitedSource === 'mine' ? Infinity : Math.max(0, panelSettings.visitedCount - pins.length);
+  const room = panelSettings.visitedSource === 'mine' ? Infinity : Math.max(0, visitedCountOf(panelSettings.visitedCount) - pins.length);
   visitedSites = [...pins, ...rest.slice(0, room)];
 
   const isPinned = (s) => pinned.some(p => p.url === s.url);

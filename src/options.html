@@ -1225,11 +1225,12 @@
         </div>
         <div class="inline-selects">
           <select class="select-field" data-panel="visitedCount" aria-label="Sites listed">
-            <option value="5">5 sites</option>
-            <option value="10">10 sites</option>
-            <option value="15">15 sites</option>
-            <option value="20">20 sites</option>
-            <option value="50">50 sites</option>
+            <option value="6">6 sites</option>
+            <option value="12">12 sites</option>
+            <option value="18">18 sites</option>
+            <option value="24">24 sites</option>
+            <option value="36">36 sites</option>
+            <option value="48">48 sites</option>
           </select>
           <select class="select-field" data-panel="visitedDays" data-visited-source="history" aria-label="Period">
             <option value="7">in the last 7 days</option>
@@ -1237,6 +1238,16 @@
             <option value="90">in the last 90 days</option>
           </select>
         </div>
+      </div>
+      <div class="card-row" data-visited-source="chrome history">
+        <div>
+          <div class="label">Group by domain</div>
+          <div class="hint">List a domain's sites as one, like mail.google.com and docs.google.com as google.com.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" data-panel="visitedByDomain">
+          <span class="slider"></span>
+        </label>
       </div>
       <div class="card-row">
         <div>

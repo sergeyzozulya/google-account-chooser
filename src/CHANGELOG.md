@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.5.1] — 2026-11-24
+
+### Added
+- **Options → Most visited → Group by domain** (with Chrome's New Tab list or Browser history): a domain's sites listed as one, like mail.google.com and docs.google.com as google.com, their visits added up
+
+### Changed
+- Options → Most visited → Sites listed: 6, 12 (the default), 18, 24, 36 or 48, to fill rows of most column choices; 5, 10, 15, 20 and 50 become the next one up, or 48
+
+---
+
 ## [2.5.0] — 2026-11-20
 
 ### Added

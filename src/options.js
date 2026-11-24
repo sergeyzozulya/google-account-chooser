@@ -1,4 +1,4 @@
-/* global SERVICE_DEFS, SERVICE_GROUPS, reconcileGroups, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, VISITED_EDITS, visitedEditsOf, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate, ACTION_ICONS, DARK_THEME, drawActionIcon */
+/* global SERVICE_DEFS, SERVICE_GROUPS, reconcileGroups, DASHBOARD_SECTIONS, GMAIL_DEFAULTS, PANEL_DEFAULTS, VISITED_EDITS, visitedEditsOf, visitedCountOf, dashboardSections, popupOrder, sectionIcon, accountKey, orderAccounts, TITLE_FORMATS, formatDate, ACTION_ICONS, DARK_THEME, drawActionIcon */
 
 // Build per-service defaults from shared definitions
 const DEFAULT_SERVICES = Object.fromEntries(
@@ -1070,6 +1070,7 @@ chrome.storage.sync.get(
     state.dashboardSize = data.dashboardSize;
     for (const key of Object.keys({ ...GMAIL_DEFAULTS, ...PANEL_DEFAULTS })) state[key] = data[key];
     if (state.visitedIcons !== 'large') state.visitedIcons = 'small';  // Small (row) and Small (col) became Small
+    state.visitedCount = visitedCountOf(state.visitedCount);
     state.popupSections = { ...state.popupSections, ...data.popupSections };
     state.popupOrder = popupOrder(data.popupOrder);
     state.searchButtons = { ...state.searchButtons, ...data.searchButtons };

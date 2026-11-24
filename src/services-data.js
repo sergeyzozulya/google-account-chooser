@@ -172,8 +172,14 @@ const PANEL_DEFAULTS = {
   visitedColumns: '1',     // with 'small': columns, or 'auto' for as many as fit side by side
   visitedText: true,       // each site's name; off lists icons only
   visitedVisits: false,    // with 'history': each site's number of visits
-  visitedCount: 10,        // sites listed, at most
+  visitedByDomain: false,  // with 'chrome' or 'history': subdomains listed as one site, their domain
+  visitedCount: 12,        // sites listed, at most
 };
+
+// Options → Most visited → Sites listed: counts that fill rows of most column choices. Counts saved
+// before 2.5.1 (5, 10, 15, 20 or 50) become the next one up, or the largest.
+const VISITED_COUNTS = [6, 12, 18, 24, 36, 48];
+const visitedCountOf = (count) => VISITED_COUNTS.find(c => c >= count) ?? VISITED_COUNTS.at(-1);
 
 // Most visited's Edit mode changes, kept on this device (chrome.storage.local visitedEdits). The source
 // list isn't changed: removed holds hostnames, whose sites aren't listed; added and pinned sites
